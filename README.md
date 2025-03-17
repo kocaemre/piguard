@@ -86,6 +86,31 @@ npx prisma studio
 
 ## Deployment
 
+### Vercel Deployment
+
+To deploy PiGuard on Vercel:
+
+1. Connect your repository to Vercel
+2. Add the following environment variables:
+   - `DATABASE_URL`: Your PostgreSQL connection string
+   - `NEXTAUTH_SECRET`: A secure secret for NextAuth
+   - `NEXTAUTH_URL`: Your application URL on Vercel
+
+#### Troubleshooting Prisma on Vercel
+
+If you encounter the following error:
+```
+Error [PrismaClientInitializationError]: Prisma has detected that this project was built on Vercel, which caches dependencies. This leads to an outdated Prisma Client because Prisma's auto-generation isn't triggered.
+```
+
+The project is already configured to handle this issue with the following settings in package.json:
+```json
+"build": "prisma generate && next build",
+"postinstall": "prisma generate"
+```
+
+These settings ensure that Prisma Client is properly generated during the build process on Vercel.
+
 ### Raspberry Pi Setup
 
 For deploying the companion app on Raspberry Pi:
