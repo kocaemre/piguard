@@ -1,36 +1,157 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PiGuard - Raspberry Pi Based Security System
+
+PiGuard is a comprehensive security monitoring and management system that integrates with Raspberry Pi devices to provide real-time surveillance, sensor monitoring, and remote control capabilities. Built with Next.js, TypeScript, and modern web technologies, PiGuard offers a robust, user-friendly interface for managing your security infrastructure.
+
+## Features
+
+- **Real-time Camera Surveillance**: Access live video feeds from connected cameras
+- **Sensor Monitoring**: Track environment data like temperature, humidity, and motion detection
+- **Interactive Dashboard**: View system status, alerts, and sensor readings in a clean interface
+- **User Management**: Role-based access control with ADMIN and APPROVED user permissions
+- **Geolocation Tracking**: Monitor security device locations on an interactive map
+- **Command Interface**: Send direct commands to connected Raspberry Pi devices
+- **System Logs**: Comprehensive logging for all system events and activities
+- **Remote Configuration**: Configure Raspberry Pi settings remotely through the web interface
+- **Demo Mode**: Test functionality without actual hardware for development and demonstration
+
+## Technology Stack
+
+- **Frontend**: Next.js 15, React 19, TailwindCSS, shadcn/ui
+- **Backend**: Next.js API Routes, NextAuth.js for authentication
+- **Database**: PostgreSQL with Prisma ORM
+- **Monitoring**: Sentry for error tracking and performance monitoring
+- **Maps**: Leaflet for interactive mapping capabilities
+- **Real-time Communication**: Socket.io for live data updates
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18.0 or higher
+- PostgreSQL database
+- npm or yarn package manager
+- Raspberry Pi (for production deployment)
+
+### Installation
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/piguard.git
+cd piguard
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+# or
+yarn install
+```
+
+3. Set up environment variables by creating a `.env` file in the root directory:
+
+```
+DATABASE_URL="postgresql://username:password@localhost:5432/piguard"
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-nextauth-secret"
+```
+
+4. Set up the database:
+
+```bash
+npx prisma migrate dev
+```
+
+5. Start the development server:
 
 ```bash
 npm run dev
 # or
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+6. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Default Admin Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+On first run, you'll need to create an admin user:
 
-## Learn More
+1. Register a new user at `/auth/register`
+2. Manually update the user role to "ADMIN" in the database or use the Prisma Studio:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npx prisma studio
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Raspberry Pi Setup
 
-## Deploy on Vercel
+For deploying the companion app on Raspberry Pi:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Install required dependencies on your Raspberry Pi
+2. Configure the Pi's IP address and port in the dashboard settings
+3. Set up the appropriate sensors and cameras on your Raspberry Pi
+4. Start the companion service on the Raspberry Pi
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Production Deployment
+
+To deploy PiGuard to a production environment:
+
+```bash
+npm run build
+npm run start
+```
+
+For continuous deployment, consider using a platform like Vercel or containerizing the application with Docker.
+
+## Usage
+
+### Dashboard
+
+The dashboard provides a comprehensive overview of your security system, including:
+
+- Status indicators for all connected devices
+- Latest sensor readings
+- Interactive map showing device locations
+- Recent activity logs
+
+### Camera Monitoring
+
+Access live and recorded footage from the Camera section. Features include:
+
+- Multiple camera view support
+- Motion detection alerts
+- Video recording and playback
+
+### Sensor Data
+
+Monitor environmental conditions and sensor readings:
+
+- Temperature and humidity trends
+- Motion detection events
+- Distance sensors and other connected devices
+
+### User Management
+
+Administrators can manage users through the settings panel:
+
+- Add new administrators
+- Approve pending user registrations
+- Revoke access when needed
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgements
+
+- Next.js and Vercel for the framework and deployment platform
+- shadcn/ui for UI components
+- Leaflet for mapping capabilities
+- All open-source libraries used in this project
