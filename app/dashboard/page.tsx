@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { useDemo } from "@/app/lib/DemoContext";
-import { MapPin, Navigation } from "lucide-react";
+import { MapPin, Navigation, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import dynamic from "next/dynamic";
 
@@ -112,63 +112,230 @@ export default function DashboardPage() {
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [gpsData, setGpsData] = useState<any[]>([]);
   const [showPath, setShowPath] = useState(true);
+  const [statusData, setStatusData] = useState<any>(null);
+  const [gpsRetryCount, setGpsRetryCount] = useState(0);
+  const [statusRetryCount, setStatusRetryCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const maxRetries = 10;
+  const [metrics, setMetrics] = useState([
+    {
+      title: "CPU Usage",
+      value: "--",
+      change: "--",
+      changeType: "neutral",
+      isDevelopment: true
+    },
+    {
+      title: "RAM",
+      value: "--",
+      change: "--",
+      changeType: "neutral",
+      isDevelopment: true
+    },
+    {
+      title: "Temperature",
+      value: "--",
+      change: "--",
+      changeType: "neutral",
+      isDevelopment: true
+    },
+    {
+      title: "Battery",
+      value: "--",
+      change: "--",
+      changeType: "neutral",
+      isDevelopment: true
+    },
+  ]);
   
-  // Load Leaflet CSS
+  // Load Leaflet CSS and fetch data
   useEffect(() => {
     const loadLeafletCSS = async () => {
+      // @ts-ignore - Importing CSS file directly
       await import('leaflet/dist/leaflet.css');
       setLeafletLoaded(true);
     };
     
     loadLeafletCSS();
     
-    // Generate mock GPS data for demo
-    const generateData = () => {
-      setGpsData(generateRealisticPath(30));
-    };
+    fetchData();
     
-    generateData();
-    
-    // Update data periodically
-    const interval = setInterval(generateData, 60000);
+    // Set up polling interval
+    const interval = setInterval(fetchData, 5000); // Update every 5 seconds
     
     return () => clearInterval(interval);
-  }, []);
+  }, [isDemoMode]);
 
-  // In a real app, we would fetch this data from the Raspberry Pi API
-  const metrics = [
-    {
-      title: "CPU Usage",
-      value: "32%",
-      change: "+2%",
-      changeType: "increase",
-    },
-    {
-      title: "RAM",
-      value: "1.8GB/4GB",
-      change: "-120MB",
-      changeType: "decrease",
-    },
-    {
-      title: "Temperature",
-      value: "52°C",
-      change: "+3°C",
-      changeType: "increase",
-    },
-    {
-      title: "Battery",
-      value: "85%",
-      change: "-5%",
-      changeType: "decrease",
-    },
-  ];
+  const fetchData = async () => {
+    if (isDemoMode) {
+      // Generate mock GPS data for demo
+      setGpsData(generateRealisticPath(30));
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      // Fetch GPS data through our proxy
+      try {
+        const gpsResponse = await fetch('/api/proxy?endpoint=gps');
+        
+        if (gpsResponse.ok) {
+          const singleGpsPoint = await gpsResponse.json();
+          setGpsError(null);
+          setGpsRetryCount(0);
+          
+          // Transform single GPS point to an array for compatibility
+          const newGpsData = [...gpsData];
+          
+          // Add new point if we have valid coordinates
+          if (singleGpsPoint.latitude !== 0 && singleGpsPoint.longitude !== 0) {
+            newGpsData.push(singleGpsPoint);
+            
+            // Keep only the last 30 points
+            if (newGpsData.length > 30) {
+              newGpsData.shift();
+            }
+            
+            setGpsData(newGpsData);
+          } else if (newGpsData.length === 0) {
+            // If we have no data yet and got zeros, use demo data
+            setGpsData(generateRealisticPath(5));
+          }
+        } else {
+          // Increment retry count for GPS
+          setGpsRetryCount(prev => {
+            const newCount = prev + 1;
+            if (newCount >= maxRetries) {
+              setGpsError("Failed to fetch GPS data after multiple attempts.");
+            }
+            return newCount;
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching GPS data:", err);
+        // Increment retry count for GPS
+        setGpsRetryCount(prev => {
+          const newCount = prev + 1;
+          if (newCount >= maxRetries) {
+            setGpsError("Failed to fetch GPS data after multiple attempts.");
+          }
+          return newCount;
+        });
+      }
+      
+      // Fetch status data through our proxy
+      try {
+        const statusResponse = await fetch('/api/proxy?endpoint=status');
+        
+        if (statusResponse.ok) {
+          const data = await statusResponse.json();
+          setStatusData(data);
+          setStatusError(null);
+          setStatusRetryCount(0);
+          
+          // Update metrics based on status data if available
+          if (data) {
+            setMetrics([
+              {
+                title: "CPU Usage",
+                value: data.cpu || "--",
+                change: data.cpu_change || "--",
+                changeType: data.cpu_change && parseFloat(data.cpu_change) > 0 ? "increase" : "decrease",
+                isDevelopment: !data.cpu
+              },
+              {
+                title: "RAM",
+                value: data.ram || "--",
+                change: data.ram_change || "--",
+                changeType: data.ram_change && parseFloat(data.ram_change) > 0 ? "increase" : "decrease",
+                isDevelopment: !data.ram
+              },
+              {
+                title: "Temperature",
+                value: data.temperature || "--",
+                change: data.temp_change || "--",
+                changeType: data.temp_change && parseFloat(data.temp_change) > 0 ? "increase" : "decrease",
+                isDevelopment: !data.temperature
+              },
+              {
+                title: "Battery",
+                value: data.battery || "--",
+                change: data.battery_change || "--",
+                changeType: data.battery_change && parseFloat(data.battery_change) > 0 ? "increase" : "decrease",
+                isDevelopment: !data.battery
+              },
+            ]);
+          }
+        } else {
+          // Increment retry count for status
+          setStatusRetryCount(prev => {
+            const newCount = prev + 1;
+            if (newCount >= maxRetries) {
+              setStatusError("Failed to fetch status data after multiple attempts.");
+            }
+            return newCount;
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching status data:", err);
+        // Increment retry count for status
+        setStatusRetryCount(prev => {
+          const newCount = prev + 1;
+          if (newCount >= maxRetries) {
+            setStatusError("Failed to fetch status data after multiple attempts.");
+          }
+          return newCount;
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle refresh for GPS data
+  const handleGpsRefresh = () => {
+    setGpsRetryCount(0);
+    setGpsError(null);
+    fetchData();
+  };
+
+  // Handle refresh for status data
+  const handleStatusRefresh = () => {
+    setStatusRetryCount(0);
+    setStatusError(null);
+    fetchData();
+  };
 
   // Status information
   const statusItems = [
-    { label: "Last Connection", value: "2 mins ago" },
-    { label: "Active Sensors", value: "5/6" },
-    { label: "Warnings", value: "2" },
-    { label: "Uptime", value: "3d 4h 12m" },
+    { 
+      label: "Last Connection", 
+      value: statusData ? 
+        new Date(statusData.timestamp || Date.now()).toLocaleTimeString() : 
+        "Just now" 
+    },
+    { 
+      label: "Active Sensors", 
+      value: statusData ? 
+        `${statusData.camera === "connected" ? "1" : "0"}/2` : 
+        "Unknown" 
+    },
+    { 
+      label: "Warnings", 
+      value: statusData ? 
+        (statusData.warnings || "0") : 
+        "0" 
+    },
+    { 
+      label: "Uptime", 
+      value: statusData ? 
+        (statusData.uptime || "Unknown") : 
+        "Unknown" 
+    },
   ];
 
   // Get current GPS position
@@ -202,15 +369,21 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{metric.value}</div>
-              <div
-                className={`text-xs font-medium mt-2 ${
-                  metric.changeType === "increase"
-                    ? "text-red-600"
-                    : "text-green-600"
-                }`}
-              >
-                {metric.change} since last hour
-              </div>
+              {metric.value === "--" ? (
+                <div className="text-xs font-medium mt-2 text-amber-600">
+                  Development mode - no real data
+                </div>
+              ) : (
+                <div
+                  className={`text-xs font-medium mt-2 ${
+                    metric.changeType === "increase"
+                      ? "text-red-600"
+                      : "text-green-600"
+                  }`}
+                >
+                  {metric.change} since last hour
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -220,10 +393,27 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Status Summary */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Status Summary</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStatusRefresh}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh Status
+            </Button>
           </CardHeader>
           <CardContent>
+            {statusError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+                <p className="font-medium">Error: {statusError}</p>
+                {statusRetryCount >= maxRetries && (
+                  <p>Maximum retry attempts reached. Please refresh manually.</p>
+                )}
+              </div>
+            )}
             <div className="space-y-4">
               {statusItems.map((item, i) => (
                 <div key={i} className="flex justify-between items-center border-b pb-2 last:border-0">
@@ -239,15 +429,34 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Robot Location</CardTitle>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setShowPath(!showPath)}
-            >
-              {showPath ? "Hide Path" : "Show Path"}
-            </Button>
+            <div className="flex space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowPath(!showPath)}
+              >
+                {showPath ? "Hide Path" : "Show Path"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGpsRefresh}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh GPS
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="p-0 overflow-hidden rounded-b-lg">
+            {gpsError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm">
+                <p className="font-medium">Error: {gpsError}</p>
+                {gpsRetryCount >= maxRetries && (
+                  <p>Maximum retry attempts reached. Please refresh manually.</p>
+                )}
+              </div>
+            )}
             {leafletLoaded && (
               <div className="h-[300px] w-full">
                 <MarkerIcon />

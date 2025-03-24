@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { useDemo } from "@/app/lib/DemoContext";
-import { AlertTriangle, MapPin, Camera, Navigation } from "lucide-react";
+import { AlertTriangle, MapPin, Camera, Navigation, RefreshCw } from "lucide-react";
 import dynamic from "next/dynamic";
 
 // Dynamically import map components to avoid SSR issues
@@ -149,6 +149,8 @@ export default function SensorsPage() {
   const [showPath, setShowPath] = useState(true);
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [leafletIcon, setLeafletIcon] = useState<any>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 10;
   
   // Load Leaflet CSS and setup Icon
   useEffect(() => {
@@ -191,35 +193,72 @@ export default function SensorsPage() {
         setGpsData(generateRealisticPath(dataPoints));
         setCameraData(generateMockCameraData(dataPoints));
         setLoading(false);
-      } else {
+        return;
+      }
+      
+      try {
+        // Fetch GPS data via our proxy
         try {
-          // In a real app, fetch from Raspberry Pi API
-          const ipResponse = await fetch("/api/settings/raspberry-pi");
-          const ipData = await ipResponse.json();
+          const gpsResponse = await fetch('/api/proxy?endpoint=gps');
           
-          if (!ipData.ip) {
-            setError("Raspberry Pi IP not configured. Please set it in Settings.");
-            setLoading(false);
-            return;
+          if (!gpsResponse.ok) {
+            throw new Error(`Failed to connect to GPS API (Status: ${gpsResponse.status})`);
           }
           
-          // Simulate an API call to Raspberry Pi
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          const singleGpsPoint = await gpsResponse.json();
           
-          // Randomly fail 30% of the time to simulate connection issues
-          if (Math.random() > 0.7) {
-            throw new Error("Failed to connect to Raspberry Pi");
+          // Reset retry count on success
+          setRetryCount(0);
+          
+          // If we have no data or got zeros, initialize with demo data
+          if (gpsData.length === 0 || 
+              (singleGpsPoint.latitude === 0 && singleGpsPoint.longitude === 0)) {
+            const dataPoints = selectedTimeRange === '15m' ? 60 : selectedTimeRange === '1h' ? 120 : 240;
+            setGpsData(generateRealisticPath(dataPoints));
+          } else {
+            // Add the new point to our history
+            const newGpsData = [...gpsData];
+            newGpsData.push(singleGpsPoint);
+            
+            // Keep only a certain number of points based on selected time range
+            const maxPoints = selectedTimeRange === '15m' ? 60 : selectedTimeRange === '1h' ? 120 : 240;
+            if (newGpsData.length > maxPoints) {
+              newGpsData.shift();
+            }
+            
+            setGpsData(newGpsData);
           }
-          
-          const dataPoints = selectedTimeRange === '15m' ? 60 : selectedTimeRange === '1h' ? 120 : 240;
-          setGpsData(generateRealisticPath(dataPoints));
-          setCameraData(generateMockCameraData(dataPoints));
         } catch (err) {
-          console.error("Error fetching sensor data:", err);
-          setError("Failed to connect to Raspberry Pi. Check connection or enable Demo Mode.");
-        } finally {
-          setLoading(false);
+          console.error("Error fetching GPS data:", err);
+          
+          // Increment retry count
+          setRetryCount(prev => {
+            const newCount = prev + 1;
+            if (newCount >= maxRetries) {
+              setError(`Failed to fetch GPS data after ${maxRetries} attempts. Please try refreshing.`);
+            }
+            return newCount;
+          });
+          
+          // If we have no data yet, initialize with demo data
+          if (gpsData.length === 0) {
+            const dataPoints = selectedTimeRange === '15m' ? 60 : selectedTimeRange === '1h' ? 120 : 240;
+            setGpsData(generateRealisticPath(dataPoints));
+          }
         }
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        
+        // Increment retry count
+        setRetryCount(prev => {
+          const newCount = prev + 1;
+          if (newCount >= maxRetries) {
+            setError(`Failed to fetch data after ${maxRetries} attempts. Please try refreshing.`);
+          }
+          return newCount;
+        });
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -227,71 +266,29 @@ export default function SensorsPage() {
       fetchData();
     }
     
-    // Set up polling interval in demo mode
+    // Set up polling interval
     let interval: NodeJS.Timeout | null = null;
-    if (isDemoMode && !demoLoading) {
-      interval = setInterval(() => {
-        setGpsData(prevData => {
-          if (!prevData.length) return prevData;
-          
-          const newData = [...prevData.slice(1)];
-          const lastEntry = prevData[prevData.length - 1];
-          const time = new Date();
-          
-          // Create a slight change in movement based on the last direction
-          const lastDirection = prevData.length > 1 
-            ? { 
-                lat: lastEntry.latitude - prevData[prevData.length - 2].latitude,
-                lng: lastEntry.longitude - prevData[prevData.length - 2].longitude
-              }
-            : { lat: 0, lng: 0 };
-            
-          // Add some randomness but maintain general direction for natural movement
-          const latChange = lastDirection.lat * 0.8 + (Math.random() - 0.5) * 0.00008;
-          const lngChange = lastDirection.lng * 0.8 + (Math.random() - 0.5) * 0.00008;
-          
-          newData.push({
-            time: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-            latitude: lastEntry.latitude + latChange,
-            longitude: lastEntry.longitude + lngChange,
-            altitude: Math.max(90, Math.min(110, lastEntry.altitude + (Math.random() - 0.5) * 1)),
-            satellites: Math.floor(Math.random() * 3) + 6,
-            signalStrength: Math.max(50, Math.min(100, lastEntry.signalStrength + (Math.random() - 0.5) * 5)),
-          });
-          
-          return newData;
-        });
-        
-        setCameraData(prevData => {
-          if (!prevData.length) return prevData;
-          
-          const newData = [...prevData.slice(1)];
-          const lastEntry = prevData[prevData.length - 1];
-          const time = new Date();
-          
-          newData.push({
-            time: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-            framerate: Math.max(25, Math.min(35, lastEntry.framerate + (Math.random() - 0.5) * 2)),
-            brightness: Math.max(50, Math.min(70, lastEntry.brightness + (Math.random() - 0.5) * 3)),
-            contrast: Math.max(40, Math.min(60, lastEntry.contrast + (Math.random() - 0.5) * 3)),
-            motionDetected: Math.random() > 0.7 ? 1 : 0,
-          });
-          
-          return newData;
-        });
-      }, 15000); // Update every 15 seconds
+    
+    if (!demoLoading && retryCount < maxRetries) {
+      interval = setInterval(fetchData, 5000); // Poll every 5 seconds
     }
     
     return () => {
-      if (interval) clearInterval(interval);
+      if (interval) {
+        clearInterval(interval);
+      }
     };
-  }, [selectedTimeRange, isDemoMode, demoLoading]);
+  }, [isDemoMode, demoLoading, selectedTimeRange, retryCount]);
   
   const handleTimeRangeChange = (range: '15m' | '1h' | '24h') => {
     setSelectedTimeRange(range);
   };
 
   const handleRefresh = () => {
+    // Reset retry counter and error state
+    setRetryCount(0);
+    setError(null);
+    
     // Reload the data
     setGpsData([]);
     setCameraData([]);
@@ -423,6 +420,11 @@ export default function SensorsPage() {
             <div>
               <p className="font-medium text-red-700">Connection Error</p>
               <p className="text-sm text-red-600">{error}</p>
+              {retryCount >= maxRetries && (
+                <p className="text-sm text-red-600 mt-1">
+                  Maximum retry attempts reached ({maxRetries}). Please refresh manually.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -458,8 +460,15 @@ export default function SensorsPage() {
           variant="outline" 
           onClick={handleRefresh}
           disabled={loading}
+          className="flex items-center gap-2"
         >
+          <RefreshCw className="h-4 w-4" />
           {loading ? "Loading..." : "Refresh Data"}
+          {retryCount > 0 && retryCount < maxRetries && (
+            <span className="ml-1 text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">
+              Retry: {retryCount}/{maxRetries}
+            </span>
+          )}
         </Button>
       </div>
       

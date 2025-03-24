@@ -15,8 +15,8 @@ export default function SettingsPage() {
   const { isDemoMode, setIsDemoMode, loading: demoLoading } = useDemo();
   
   // Raspberry Pi settings
-  const [raspberryPiIp, setRaspberryPiIp] = useState("");
-  const [raspberryPiPort, setRaspberryPiPort] = useState("8000");
+  const [raspberryPiIp, setRaspberryPiIp] = useState("10.146.43.159");
+  const [raspberryPiPort, setRaspberryPiPort] = useState("5000");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -29,7 +29,7 @@ export default function SettingsPage() {
         if (response.ok) {
           const data = await response.json();
           setRaspberryPiIp(data.ip || "");
-          setRaspberryPiPort(data.port || "8000");
+          setRaspberryPiPort(data.port || "5000");
         }
       } catch (error) {
         console.error("Failed to fetch Raspberry Pi settings:", error);
@@ -234,7 +234,7 @@ export default function SettingsPage() {
                     id="port"
                     value={raspberryPiPort}
                     onChange={(e) => setRaspberryPiPort(e.target.value)}
-                    placeholder="e.g. 8000"
+                    placeholder="e.g. 5000"
                     className={!isValidPort(raspberryPiPort) ? "border-red-500" : ""}
                   />
                   {!isValidPort(raspberryPiPort) && (

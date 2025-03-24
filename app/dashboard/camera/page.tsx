@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { RotateCw, ZoomIn, ZoomOut, Settings, AlertTriangle } from "lucide-react";
+import { RotateCw, ZoomIn, ZoomOut, AlertTriangle, RefreshCw } from "lucide-react";
 import { useDemo } from "@/app/lib/DemoContext";
 
 export default function CameraPage() {
@@ -13,12 +13,17 @@ export default function CameraPage() {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [cameraImage, setCameraImage] = useState<string | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 10;
 
   // Connect to camera stream
   useEffect(() => {
     const connectToCamera = async () => {
       setStreaming(false);
       setError(null);
+      setRetryCount(0);
       
       try {
         if (isDemoMode) {
@@ -27,22 +32,75 @@ export default function CameraPage() {
             setStreaming(true);
           }, 2000);
         } else {
-          // In a real app, fetch Raspberry Pi info and connect to the camera
-          const ipResponse = await fetch("/api/settings/raspberry-pi");
-          const ipData = await ipResponse.json();
-          
-          if (!ipData.ip) {
-            setError("Raspberry Pi IP not configured. Please set it in Settings.");
-            return;
-          }
-          
-          // Simulate connection attempt
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          
-          // 70% chance of success
-          if (Math.random() > 0.3) {
-            setStreaming(true);
-          } else {
+          // Try connecting to the camera API via our proxy
+          try {
+            const response = await fetch('/api/proxy?endpoint=camera');
+            
+            if (!response.ok) {
+              throw new Error(`Failed to connect to camera (Status: ${response.status})`);
+            }
+            
+            const data = await response.json();
+            
+            if (data && data.image) {
+              setCameraImage(`data:image/jpeg;base64,${data.image}`);
+              setStreaming(true);
+              
+              // Set up interval to refresh the camera image
+              if (refreshInterval) {
+                clearInterval(refreshInterval);
+              }
+              
+              const interval = setInterval(async () => {
+                try {
+                  const refreshResponse = await fetch('/api/proxy?endpoint=camera');
+                  
+                  if (refreshResponse.ok) {
+                    const refreshData = await refreshResponse.json();
+                    setCameraImage(`data:image/jpeg;base64,${refreshData.image}`);
+                    // Reset retry count on success
+                    setRetryCount(0);
+                  } else {
+                    // Increment retry count
+                    setRetryCount(prev => {
+                      const newCount = prev + 1;
+                      if (newCount >= maxRetries) {
+                        // Stop refreshing if max retries reached
+                        if (refreshInterval) {
+                          clearInterval(refreshInterval);
+                          setRefreshInterval(null);
+                        }
+                        setError("Failed to refresh camera after multiple attempts.");
+                        setStreaming(false);
+                      }
+                      return newCount;
+                    });
+                  }
+                } catch (err) {
+                  console.error("Error refreshing camera:", err);
+                  // Increment retry count
+                  setRetryCount(prev => {
+                    const newCount = prev + 1;
+                    if (newCount >= maxRetries) {
+                      // Stop refreshing if max retries reached
+                      if (refreshInterval) {
+                        clearInterval(refreshInterval);
+                        setRefreshInterval(null);
+                      }
+                      setError("Failed to refresh camera after multiple attempts.");
+                      setStreaming(false);
+                    }
+                    return newCount;
+                  });
+                }
+              }, 33); // Refresh approximately 30 times per second (33ms intervals)
+              
+              setRefreshInterval(interval);
+            } else {
+              throw new Error("Invalid camera data received");
+            }
+          } catch (err) {
+            console.error("Camera connection error:", err);
             throw new Error("Could not connect to camera");
           }
         }
@@ -53,6 +111,13 @@ export default function CameraPage() {
     };
 
     connectToCamera();
+    
+    // Cleanup interval on unmount
+    return () => {
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+      }
+    };
   }, [isDemoMode]);
 
   const handleRotate = () => {
@@ -62,29 +127,105 @@ export default function CameraPage() {
   const handleRefresh = () => {
     setStreaming(false);
     setError(null);
+    setRetryCount(0);
     
-    setTimeout(() => {
+    // Clear existing interval
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      setRefreshInterval(null);
+    }
+    
+    setTimeout(async () => {
       if (isDemoMode) {
         setStreaming(true);
       } else {
-        // 70% chance of success when not in demo mode
-        if (Math.random() > 0.3) {
-          setStreaming(true);
-        } else {
+        try {
+          // Try connecting to the camera API via our proxy
+          const response = await fetch('/api/proxy?endpoint=camera');
+          
+          if (!response.ok) {
+            throw new Error(`Failed to connect to camera (Status: ${response.status})`);
+          }
+          
+          const data = await response.json();
+          
+          if (data && data.image) {
+            setCameraImage(`data:image/jpeg;base64,${data.image}`);
+            setStreaming(true);
+            
+            // Set up interval to refresh the camera image
+            const interval = setInterval(async () => {
+              try {
+                const refreshResponse = await fetch('/api/proxy?endpoint=camera');
+                
+                if (refreshResponse.ok) {
+                  const refreshData = await refreshResponse.json();
+                  setCameraImage(`data:image/jpeg;base64,${refreshData.image}`);
+                  // Reset retry count on success
+                  setRetryCount(0);
+                } else {
+                  // Increment retry count
+                  setRetryCount(prev => {
+                    const newCount = prev + 1;
+                    if (newCount >= maxRetries) {
+                      // Stop refreshing if max retries reached
+                      if (refreshInterval) {
+                        clearInterval(refreshInterval);
+                        setRefreshInterval(null);
+                      }
+                      setError("Failed to refresh camera after multiple attempts.");
+                      setStreaming(false);
+                    }
+                    return newCount;
+                  });
+                }
+              } catch (err) {
+                console.error("Error refreshing camera:", err);
+                // Increment retry count
+                setRetryCount(prev => {
+                  const newCount = prev + 1;
+                  if (newCount >= maxRetries) {
+                    // Stop refreshing if max retries reached
+                    clearInterval(interval);
+                    setRefreshInterval(null);
+                    setError("Failed to refresh camera after multiple attempts.");
+                    setStreaming(false);
+                  }
+                  return newCount;
+                });
+              }
+            }, 33); // Refresh approximately 30 times per second (33ms intervals)
+            
+            setRefreshInterval(interval);
+          } else {
+            throw new Error("Invalid camera data received");
+          }
+        } catch (err) {
+          console.error("Camera refresh error:", err);
           setError("Failed to connect to camera. Check connection or enable Demo Mode.");
         }
       }
-    }, 2000);
+    }, 1000);
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Live Camera</h1>
-        <p className="text-gray-500 mt-2">
-          View and control the camera feed from your Raspberry Pi robot.
-          {isDemoMode && <span className="ml-2 text-yellow-600 font-medium">(Demo Mode)</span>}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Live Camera</h1>
+          <p className="text-gray-500 mt-2">
+            View and control the camera feed from your Raspberry Pi robot.
+            {isDemoMode && <span className="ml-2 text-yellow-600 font-medium">(Demo Mode)</span>}
+          </p>
+        </div>
+        <Button 
+          onClick={handleRefresh}
+          variant="default"
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Refresh Camera
+        </Button>
       </div>
 
       {/* Demo Mode Notice */}
@@ -149,10 +290,9 @@ export default function CameraPage() {
                       <p className="text-sm text-gray-400 mt-2">Check connections or enable Demo Mode</p>
                     </div>
                   ) : (
-                    // For prototyping, we'll show a placeholder with proper containment
                     <div className="w-full h-full relative">
                       <div 
-                        className="absolute inset-0 bg-gradient-to-r from-gray-800 to-gray-700 flex items-center justify-center origin-center"
+                        className="absolute inset-0 flex items-center justify-center origin-center"
                         style={{ 
                           transform: `scale(${zoomLevel}) rotate(${rotation}deg)`,
                           maxWidth: "100%",
@@ -174,7 +314,15 @@ export default function CameraPage() {
                                 style={{ top: '70%', left: '40%' }}></div>
                           </div>
                         ) : (
-                          <p className="text-white">Live camera feed</p>
+                          cameraImage ? (
+                            <img 
+                              src={cameraImage} 
+                              alt="Live camera feed" 
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <p className="text-white">Waiting for image...</p>
+                          )
                         )}
                       </div>
                     </div>
@@ -250,14 +398,34 @@ export default function CameraPage() {
                 </div>
               </div>
 
-              {/* Additional Settings */}
-              <Button 
-                variant="outline" 
-                className="w-full"
-                disabled={!streaming && !error}
-              >
-                <Settings className="mr-2 h-4 w-4" /> Advanced Settings
-              </Button>
+              {/* Connection Status */}
+              <div className="mt-6 pt-6 border-t">
+                <h3 className="text-sm font-medium mb-2">Connection Status</h3>
+                <div className="flex items-center space-x-2">
+                  <div 
+                    className={`h-3 w-3 rounded-full ${
+                      streaming 
+                        ? "bg-green-500" 
+                        : error 
+                        ? "bg-red-500" 
+                        : "bg-yellow-500"
+                    }`}
+                  ></div>
+                  <span className="text-sm">
+                    {streaming 
+                      ? "Connected" 
+                      : error 
+                      ? "Error" 
+                      : "Connecting..."
+                    }
+                  </span>
+                </div>
+                {retryCount > 0 && retryCount < maxRetries && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Retry attempts: {retryCount}/{maxRetries}
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>

@@ -12,7 +12,7 @@ export async function GET() {
     
     // Değerleri alırken await kullanmadan
     const ipValue = cookieStore.get("raspberry_pi_ip")?.value || "";
-    const portValue = cookieStore.get("raspberry_pi_port")?.value || "8000";
+    const portValue = cookieStore.get("raspberry_pi_port")?.value || "5000";
 
     return NextResponse.json({
       ip: ipValue,
