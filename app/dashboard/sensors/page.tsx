@@ -8,8 +8,10 @@ import {
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { useDemo } from "@/app/lib/DemoContext";
-import { AlertTriangle, MapPin, Camera, Navigation, RefreshCw } from "lucide-react";
+import { AlertTriangle, MapPin, Camera, Navigation, RefreshCw, Database } from "lucide-react";
 import dynamic from "next/dynamic";
+import { dummyGpsData } from "@/app/lib/dummyGpsData";
+import { Switch } from "@/components/ui/switch";
 
 // Dynamically import map components to avoid SSR issues
 const MapContainer = dynamic(
@@ -139,7 +141,7 @@ const generateRealisticPath = (count: number) => {
 };
 
 export default function SensorsPage() {
-  const { isDemoMode, loading: demoLoading } = useDemo();
+  const { isDemoMode, loading: demoLoading, useDummyGpsData, toggleDummyGpsData } = useDemo();
   const [selectedTimeRange, setSelectedTimeRange] = useState<'15m' | '1h' | '24h'>('15m');
   const [gpsData, setGpsData] = useState<any[]>([]);
   const [cameraData, setCameraData] = useState<any[]>([]);
@@ -150,6 +152,7 @@ export default function SensorsPage() {
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [leafletIcon, setLeafletIcon] = useState<any>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [currentDummyIndex, setCurrentDummyIndex] = useState(0);
   const maxRetries = 10;
   
   // Load Leaflet CSS and setup Icon
@@ -191,6 +194,35 @@ export default function SensorsPage() {
         // Use mock data in demo mode - with realistic movement path
         const dataPoints = selectedTimeRange === '15m' ? 60 : selectedTimeRange === '1h' ? 120 : 240;
         setGpsData(generateRealisticPath(dataPoints));
+        setCameraData(generateMockCameraData(dataPoints));
+        setLoading(false);
+        return;
+      }
+
+      if (useDummyGpsData) {
+        // Use dummy GPS data with timestamps
+        const now = new Date();
+        const dataPoints = selectedTimeRange === '15m' ? 60 : selectedTimeRange === '1h' ? 120 : 240;
+        const newGpsData = [];
+
+        // Create a sequence of dummy points for the selected time range
+        for (let i = 0; i < Math.min(dataPoints, dummyGpsData.length); i++) {
+          // Calculate time offset for each point
+          const timeOffset = dataPoints - i;
+          const pointTime = new Date(now.getTime() - timeOffset * 15000);
+
+          const dummyPoint = {
+            latitude: dummyGpsData[i % dummyGpsData.length].latitude,
+            longitude: dummyGpsData[i % dummyGpsData.length].longitude,
+            altitude: dummyGpsData[i % dummyGpsData.length].altitude,
+            time: pointTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            satellites: Math.floor(Math.random() * 3) + 6,
+            signalStrength: 75 + Math.random() * 15,
+          };
+          newGpsData.push(dummyPoint);
+        }
+
+        setGpsData(newGpsData);
         setCameraData(generateMockCameraData(dataPoints));
         setLoading(false);
         return;
@@ -278,7 +310,7 @@ export default function SensorsPage() {
         clearInterval(interval);
       }
     };
-  }, [isDemoMode, demoLoading, selectedTimeRange, retryCount]);
+  }, [isDemoMode, demoLoading, selectedTimeRange, retryCount, useDummyGpsData]);
   
   const handleTimeRangeChange = (range: '15m' | '1h' | '24h') => {
     setSelectedTimeRange(range);
@@ -298,6 +330,34 @@ export default function SensorsPage() {
       const dataPoints = selectedTimeRange === '15m' ? 60 : selectedTimeRange === '1h' ? 120 : 240;
       setTimeout(() => {
         setGpsData(generateRealisticPath(dataPoints));
+        setCameraData(generateMockCameraData(dataPoints));
+        setLoading(false);
+      }, 1000);
+    } else if (useDummyGpsData) {
+      // Refresh dummy GPS data
+      const now = new Date();
+      const dataPoints = selectedTimeRange === '15m' ? 60 : selectedTimeRange === '1h' ? 120 : 240;
+      const newGpsData = [];
+
+      // Create a sequence of dummy points for the selected time range
+      for (let i = 0; i < Math.min(dataPoints, dummyGpsData.length); i++) {
+        // Calculate time offset for each point
+        const timeOffset = dataPoints - i;
+        const pointTime = new Date(now.getTime() - timeOffset * 15000);
+
+        const dummyPoint = {
+          latitude: dummyGpsData[i % dummyGpsData.length].latitude,
+          longitude: dummyGpsData[i % dummyGpsData.length].longitude,
+          altitude: dummyGpsData[i % dummyGpsData.length].altitude,
+          time: pointTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          satellites: Math.floor(Math.random() * 3) + 6,
+          signalStrength: 75 + Math.random() * 15,
+        };
+        newGpsData.push(dummyPoint);
+      }
+
+      setTimeout(() => {
+        setGpsData(newGpsData);
         setCameraData(generateMockCameraData(dataPoints));
         setLoading(false);
       }, 1000);
@@ -412,8 +472,23 @@ export default function SensorsPage() {
         </div>
       )}
       
-      {/* Error Notice */}
-      {error && !isDemoMode && (
+      {/* Dummy GPS Data Notice */}
+      {useDummyGpsData && !isDemoMode && (
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
+          <div className="flex">
+            <Database className="h-6 w-6 text-blue-500 mr-2" />
+            <div>
+              <p className="font-medium text-blue-700">Using Dummy GPS Data</p>
+              <p className="text-sm text-blue-600">
+                You're viewing pre-recorded GPS data for testing purposes due to poor indoor GPS reception.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Error Message */}
+      {error && !isDemoMode && !useDummyGpsData && (
         <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
           <div className="flex">
             <AlertTriangle className="h-6 w-6 text-red-500 mr-2" />
@@ -422,7 +497,7 @@ export default function SensorsPage() {
               <p className="text-sm text-red-600">{error}</p>
               {retryCount >= maxRetries && (
                 <p className="text-sm text-red-600 mt-1">
-                  Maximum retry attempts reached ({maxRetries}). Please refresh manually.
+                  Maximum retry attempts reached ({maxRetries}). Please refresh manually or enable Dummy GPS Data.
                 </p>
               )}
             </div>
@@ -456,20 +531,38 @@ export default function SensorsPage() {
           </Button>
         </div>
         
-        <Button 
-          variant="outline" 
-          onClick={handleRefresh}
-          disabled={loading}
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className="h-4 w-4" />
-          {loading ? "Loading..." : "Refresh Data"}
-          {retryCount > 0 && retryCount < maxRetries && (
-            <span className="ml-1 text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">
-              Retry: {retryCount}/{maxRetries}
-            </span>
+        <div className="flex items-center gap-4">
+          {!isDemoMode && (
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={useDummyGpsData}
+                onCheckedChange={toggleDummyGpsData}
+                id="sensors-dummy-gps-mode"
+              />
+              <label 
+                htmlFor="sensors-dummy-gps-mode" 
+                className="text-sm text-gray-500 cursor-pointer select-none"
+              >
+                Use Dummy GPS Data
+              </label>
+            </div>
           )}
-        </Button>
+          
+          <Button 
+            variant="outline" 
+            onClick={handleRefresh}
+            disabled={loading}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            {loading ? "Loading..." : "Refresh Data"}
+            {retryCount > 0 && retryCount < maxRetries && (
+              <span className="ml-1 text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">
+                Retry: {retryCount}/{maxRetries}
+              </span>
+            )}
+          </Button>
+        </div>
       </div>
       
       {/* Sensor Cards */}

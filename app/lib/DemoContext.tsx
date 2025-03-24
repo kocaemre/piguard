@@ -1,51 +1,67 @@
 "use client";
 
-import { createContext, useState, useEffect, useContext, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type DemoContextType = {
+export type DemoContextType = {
   isDemoMode: boolean;
-  setIsDemoMode: (value: boolean) => void;
+  toggleDemoMode: () => void;
   loading: boolean;
+  useDummyGpsData: boolean;
+  toggleDummyGpsData: () => void;
 };
 
-const DemoContext = createContext<DemoContextType | undefined>(undefined);
+const DemoContext = createContext<DemoContextType>({
+  isDemoMode: false,
+  toggleDemoMode: () => {},
+  loading: true,
+  useDummyGpsData: false,
+  toggleDummyGpsData: () => {},
+});
 
-export function DemoProvider({ children }: { children: ReactNode }) {
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
+export const DemoProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+  const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [useDummyGpsData, setUseDummyGpsData] = useState(false);
 
+  // Load demo preference from localStorage on client-side
   useEffect(() => {
-    // Fetch demo mode setting from the server
-    const fetchDemoMode = async () => {
-      try {
-        const response = await fetch("/api/settings/demo-mode");
-        if (response.ok) {
-          const data = await response.json();
-          setIsDemoMode(data.enabled || false);
-        }
-      } catch (error) {
-        console.error("Failed to fetch demo mode setting:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDemoMode();
+    const savedDemoMode = localStorage.getItem('demoMode');
+    const savedDummyGpsData = localStorage.getItem('dummyGpsData');
+    
+    if (savedDemoMode !== null) {
+      setIsDemoMode(savedDemoMode === 'true');
+    }
+    
+    if (savedDummyGpsData !== null) {
+      setUseDummyGpsData(savedDummyGpsData === 'true');
+    }
+    
+    setLoading(false);
   }, []);
 
+  const toggleDemoMode = () => {
+    const newValue = !isDemoMode;
+    setIsDemoMode(newValue);
+    localStorage.setItem('demoMode', String(newValue));
+  };
+
+  const toggleDummyGpsData = () => {
+    const newValue = !useDummyGpsData;
+    setUseDummyGpsData(newValue);
+    localStorage.setItem('dummyGpsData', String(newValue));
+  };
+
   return (
-    <DemoContext.Provider value={{ isDemoMode, setIsDemoMode, loading }}>
+    <DemoContext.Provider value={{ 
+      isDemoMode, 
+      toggleDemoMode, 
+      loading,
+      useDummyGpsData,
+      toggleDummyGpsData
+    }}>
       {children}
     </DemoContext.Provider>
   );
-}
+};
 
-export function useDemo() {
-  const context = useContext(DemoContext);
-  
-  if (context === undefined) {
-    throw new Error("useDemo must be used within a DemoProvider");
-  }
-  
-  return context;
-} 
+export const useDemo = () => useContext(DemoContext); 

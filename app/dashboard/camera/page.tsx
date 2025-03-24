@@ -4,12 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { RotateCw, ZoomIn, ZoomOut, AlertTriangle, RefreshCw } from "lucide-react";
+import { RotateCw, ZoomIn, ZoomOut, AlertTriangle, RefreshCw, Pause, Play } from "lucide-react";
 import { useDemo } from "@/app/lib/DemoContext";
 
 export default function CameraPage() {
   const { isDemoMode } = useDemo();
   const [streaming, setStreaming] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +53,9 @@ export default function CameraPage() {
               }
               
               const interval = setInterval(async () => {
+                // Skip updating if paused
+                if (paused) return;
+
                 try {
                   const refreshResponse = await fetch('/api/proxy?endpoint=camera');
                   
@@ -124,10 +128,15 @@ export default function CameraPage() {
     setRotation((prev) => (prev + 90) % 360);
   };
 
+  const togglePause = () => {
+    setPaused(prev => !prev);
+  };
+
   const handleRefresh = () => {
     setStreaming(false);
     setError(null);
     setRetryCount(0);
+    setPaused(false);
     
     // Clear existing interval
     if (refreshInterval) {
@@ -155,6 +164,9 @@ export default function CameraPage() {
             
             // Set up interval to refresh the camera image
             const interval = setInterval(async () => {
+              // Skip updating if paused
+              if (paused) return;
+              
               try {
                 const refreshResponse = await fetch('/api/proxy?endpoint=camera');
                 
@@ -218,14 +230,34 @@ export default function CameraPage() {
             {isDemoMode && <span className="ml-2 text-yellow-600 font-medium">(Demo Mode)</span>}
           </p>
         </div>
-        <Button 
-          onClick={handleRefresh}
-          variant="default"
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh Camera
-        </Button>
+        <div className="flex space-x-2">
+          <Button 
+            onClick={togglePause}
+            variant={paused ? "default" : "outline"}
+            className="flex items-center gap-2"
+            disabled={!streaming}
+          >
+            {paused ? (
+              <>
+                <Play className="h-4 w-4" />
+                Resume Stream
+              </>
+            ) : (
+              <>
+                <Pause className="h-4 w-4" />
+                Pause Stream
+              </>
+            )}
+          </Button>
+          <Button 
+            onClick={handleRefresh}
+            variant="default"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh Camera
+          </Button>
+        </div>
       </div>
 
       {/* Demo Mode Notice */}
@@ -238,6 +270,21 @@ export default function CameraPage() {
               <p className="text-sm text-yellow-600">
                 You're viewing a simulated camera feed. To connect to your actual Raspberry Pi camera,
                 disable Demo Mode in Settings.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Paused Notice */}
+      {paused && streaming && (
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
+          <div className="flex">
+            <Pause className="h-6 w-6 text-blue-500 mr-2" />
+            <div>
+              <p className="font-medium text-blue-700">Camera Stream Paused</p>
+              <p className="text-sm text-blue-600">
+                The camera stream is currently paused. Click "Resume Stream" to continue receiving updates.
               </p>
             </div>
           </div>
@@ -262,15 +309,26 @@ export default function CameraPage() {
         <div className="lg:col-span-2">
           <Card className="h-full">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Camera Feed</CardTitle>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleRefresh}
-                disabled={!streaming && !error}
-              >
-                Refresh Feed
-              </Button>
+              <CardTitle>Camera Feed {paused && <span className="text-sm font-normal ml-2 text-amber-600">(Paused)</span>}</CardTitle>
+              <div className="flex space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={togglePause}
+                  disabled={!streaming && !error}
+                >
+                  {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                  {paused ? "Resume" : "Pause"}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleRefresh}
+                  disabled={!streaming && !error}
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="bg-black aspect-video rounded-md overflow-hidden relative">
@@ -325,6 +383,14 @@ export default function CameraPage() {
                           )
                         )}
                       </div>
+                      {/* Paused overlay */}
+                      {paused && (
+                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                          <div className="bg-white bg-opacity-10 backdrop-filter backdrop-blur-sm p-4 rounded-full">
+                            <Pause className="h-12 w-12 text-white" />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -340,6 +406,27 @@ export default function CameraPage() {
               <CardTitle>Camera Controls</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Stream Control */}
+              <div>
+                <h3 className="text-sm font-medium mb-2">Stream Control</h3>
+                <Button 
+                  onClick={togglePause} 
+                  className="w-full flex items-center justify-center gap-2"
+                  variant={paused ? "default" : "outline"}
+                  disabled={!streaming && !error}
+                >
+                  {paused ? (
+                    <>
+                      <Play className="h-4 w-4" /> Resume Live Stream
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="h-4 w-4" /> Pause Live Stream
+                    </>
+                  )}
+                </Button>
+              </div>
+
               {/* Rotation */}
               <div>
                 <h3 className="text-sm font-medium mb-2">Rotation</h3>
@@ -405,7 +492,9 @@ export default function CameraPage() {
                   <div 
                     className={`h-3 w-3 rounded-full ${
                       streaming 
-                        ? "bg-green-500" 
+                        ? paused
+                          ? "bg-yellow-500"
+                          : "bg-green-500" 
                         : error 
                         ? "bg-red-500" 
                         : "bg-yellow-500"
@@ -413,7 +502,9 @@ export default function CameraPage() {
                   ></div>
                   <span className="text-sm">
                     {streaming 
-                      ? "Connected" 
+                      ? paused
+                        ? "Paused"
+                        : "Connected" 
                       : error 
                       ? "Error" 
                       : "Connecting..."

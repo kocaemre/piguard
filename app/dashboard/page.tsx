@@ -3,9 +3,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { useDemo } from "@/app/lib/DemoContext";
-import { MapPin, Navigation, RefreshCw } from "lucide-react";
+import { MapPin, Navigation, RefreshCw, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import dynamic from "next/dynamic";
+import { dummyGpsData } from "@/app/lib/dummyGpsData";
+import { Switch } from "@/components/ui/switch";
 
 // Dynamically import map components to avoid SSR issues
 const MapContainer = dynamic(
@@ -108,9 +110,10 @@ const generateRealisticPath = (count: number) => {
 };
 
 export default function DashboardPage() {
-  const { isDemoMode } = useDemo();
+  const { isDemoMode, useDummyGpsData, toggleDummyGpsData } = useDemo();
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [gpsData, setGpsData] = useState<any[]>([]);
+  const [currentDummyIndex, setCurrentDummyIndex] = useState(0);
   const [showPath, setShowPath] = useState(true);
   const [statusData, setStatusData] = useState<any>(null);
   const [gpsRetryCount, setGpsRetryCount] = useState(0);
@@ -166,12 +169,60 @@ export default function DashboardPage() {
     const interval = setInterval(fetchData, 5000); // Update every 5 seconds
     
     return () => clearInterval(interval);
-  }, [isDemoMode]);
+  }, [isDemoMode, useDummyGpsData]);
 
   const fetchData = async () => {
     if (isDemoMode) {
       // Generate mock GPS data for demo
       setGpsData(generateRealisticPath(30));
+      setLoading(false);
+      return;
+    }
+    
+    if (useDummyGpsData) {
+      // Use dummy GPS data
+      const newGpsData = [...gpsData];
+      const dummyPoint = {
+        latitude: dummyGpsData[currentDummyIndex].latitude,
+        longitude: dummyGpsData[currentDummyIndex].longitude,
+        altitude: dummyGpsData[currentDummyIndex].altitude,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        satellites: Math.floor(Math.random() * 3) + 6,
+        signalStrength: 75 + Math.random() * 15,
+      };
+
+      newGpsData.push(dummyPoint);
+      
+      // Keep only the last 30 points
+      if (newGpsData.length > 30) {
+        newGpsData.shift();
+      }
+      
+      setGpsData(newGpsData);
+      
+      // Move to the next dummy data point
+      setCurrentDummyIndex((prevIndex) => (prevIndex + 1) % dummyGpsData.length);
+      
+      // If we have status data, keep it, otherwise generate dummy status
+      if (!statusData) {
+        setStatusData({
+          cpu: "25%",
+          cpu_change: "-2.5%",
+          ram: "512MB / 2GB",
+          ram_change: "+45MB",
+          temperature: "42°C",
+          temp_change: "+1.5°C",
+          battery: "85%",
+          battery_change: "-5%",
+          timestamp: new Date().toISOString(),
+          camera: "connected",
+          warnings: "0",
+          uptime: "4h 23m",
+        });
+      }
+      
+      setGpsError(null);
+      setStatusError(null);
       setLoading(false);
       return;
     }
@@ -428,7 +479,21 @@ export default function DashboardPage() {
         {/* Map */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Robot Location</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle>Robot Location</CardTitle>
+              {!isDemoMode && (
+                <div className="flex items-center space-x-2 ml-4">
+                  <Switch
+                    checked={useDummyGpsData}
+                    onCheckedChange={toggleDummyGpsData}
+                    id="dummy-gps-mode"
+                  />
+                  <label htmlFor="dummy-gps-mode" className="text-sm text-gray-500 cursor-pointer select-none">
+                    Use Dummy GPS Data
+                  </label>
+                </div>
+              )}
+            </div>
             <div className="flex space-x-2">
               <Button 
                 variant="outline" 
@@ -449,12 +514,20 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0 overflow-hidden rounded-b-lg">
-            {gpsError && (
+            {gpsError && !useDummyGpsData && (
               <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm">
                 <p className="font-medium">Error: {gpsError}</p>
                 {gpsRetryCount >= maxRetries && (
-                  <p>Maximum retry attempts reached. Please refresh manually.</p>
+                  <p>Maximum retry attempts reached. Please refresh manually or enable dummy GPS data.</p>
                 )}
+              </div>
+            )}
+            {useDummyGpsData && !isDemoMode && (
+              <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 text-sm">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4" />
+                  <p className="font-medium">Using dummy GPS data for testing</p>
+                </div>
               </div>
             )}
             {leafletLoaded && (
