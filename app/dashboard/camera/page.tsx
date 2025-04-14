@@ -8,7 +8,7 @@ import { RotateCw, ZoomIn, ZoomOut, AlertTriangle, RefreshCw, Pause, Play } from
 import { useDemo } from "@/app/lib/DemoContext";
 
 export default function CameraPage() {
-  const { isDemoMode } = useDemo();
+  const { isDemoMode, useDummyData } = useDemo();
   const [streaming, setStreaming] = useState(false);
   const [paused, setPaused] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -35,7 +35,8 @@ export default function CameraPage() {
         } else {
           // Try connecting to the camera API via our proxy
           try {
-            const response = await fetch('/api/proxy?endpoint=camera');
+            // Use the dummy API endpoint if needed
+            const response = await fetch(`/api/proxy?endpoint=camera${useDummyData ? '&dummy=true' : ''}`);
             
             if (!response.ok) {
               throw new Error(`Failed to connect to camera (Status: ${response.status})`);
@@ -57,7 +58,7 @@ export default function CameraPage() {
                 if (paused) return;
 
                 try {
-                  const refreshResponse = await fetch('/api/proxy?endpoint=camera');
+                  const refreshResponse = await fetch(`/api/proxy?endpoint=camera${useDummyData ? '&dummy=true' : ''}`);
                   
                   if (refreshResponse.ok) {
                     const refreshData = await refreshResponse.json();
@@ -122,7 +123,7 @@ export default function CameraPage() {
         clearInterval(refreshInterval);
       }
     };
-  }, [isDemoMode]);
+  }, [isDemoMode, useDummyData]);
 
   const handleRotate = () => {
     setRotation((prev) => (prev + 90) % 360);
@@ -150,7 +151,7 @@ export default function CameraPage() {
       } else {
         try {
           // Try connecting to the camera API via our proxy
-          const response = await fetch('/api/proxy?endpoint=camera');
+          const response = await fetch(`/api/proxy?endpoint=camera${useDummyData ? '&dummy=true' : ''}`);
           
           if (!response.ok) {
             throw new Error(`Failed to connect to camera (Status: ${response.status})`);
@@ -168,7 +169,7 @@ export default function CameraPage() {
               if (paused) return;
               
               try {
-                const refreshResponse = await fetch('/api/proxy?endpoint=camera');
+                const refreshResponse = await fetch(`/api/proxy?endpoint=camera${useDummyData ? '&dummy=true' : ''}`);
                 
                 if (refreshResponse.ok) {
                   const refreshData = await refreshResponse.json();

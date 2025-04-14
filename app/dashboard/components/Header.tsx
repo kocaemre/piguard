@@ -2,7 +2,7 @@
 
 import { User } from "next-auth";
 import { signOut } from "next-auth/react";
-import { Bell, ChevronDown, LogOut, Settings, User as UserIcon, Cpu } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Settings, User as UserIcon, Cpu, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,13 +14,14 @@ import {
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useDemo } from "@/app/lib/DemoContext";
+import { Switch } from "@/components/ui/switch";
 
 interface HeaderProps {
   user: User;
 }
 
 export default function Header({ user }: HeaderProps) {
-  const { isDemoMode } = useDemo();
+  const { isDemoMode, useDummyData, toggleDummyData } = useDemo();
   const [status, setStatus] = useState<"Online" | "Offline" | "Connecting">("Connecting");
   const [raspberryPiIp, setRaspberryPiIp] = useState<string>("");
   const [raspberryPiPort, setRaspberryPiPort] = useState<string>("8000");
@@ -92,6 +93,24 @@ export default function Header({ user }: HeaderProps) {
                     }`}
                   ></div>
                   <span className="text-sm font-medium text-gray-900">{status}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Dummy Data Toggle */}
+            <div className="hidden md:flex items-center mr-6 border-l pl-6">
+              <Database className="h-5 w-5 text-gray-400 mr-2" />
+              <div className="flex flex-col">
+                <div className="text-sm font-medium text-gray-500">Dummy Data</div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={useDummyData}
+                    onCheckedChange={toggleDummyData}
+                    id="dummy-data-mode"
+                  />
+                  <label htmlFor="dummy-data-mode" className="text-sm text-gray-700 cursor-pointer select-none">
+                    {useDummyData ? "Enabled" : "Disabled"}
+                  </label>
                 </div>
               </div>
             </div>

@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { useDemo } from "@/app/lib/DemoContext";
-import { MapPin, Navigation, RefreshCw, Database } from "lucide-react";
+import { MapPin, Navigation, RefreshCw, Database, Cpu, HardDrive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import dynamic from "next/dynamic";
 import { dummyGpsData } from "@/app/lib/dummyGpsData";
@@ -124,6 +124,7 @@ export default function DashboardPage() {
   const maxRetries = 10;
   const [metrics, setMetrics] = useState([
     {
+      id: "cpu",
       title: "CPU Usage",
       value: "--",
       change: "--",
@@ -131,6 +132,7 @@ export default function DashboardPage() {
       isDevelopment: true
     },
     {
+      id: "ram",
       title: "RAM",
       value: "--",
       change: "--",
@@ -138,6 +140,7 @@ export default function DashboardPage() {
       isDevelopment: true
     },
     {
+      id: "temp",
       title: "Temperature",
       value: "--",
       change: "--",
@@ -145,6 +148,7 @@ export default function DashboardPage() {
       isDevelopment: true
     },
     {
+      id: "battery",
       title: "Battery",
       value: "--",
       change: "--",
@@ -227,10 +231,14 @@ export default function DashboardPage() {
       return;
     }
     
+    // Check if we should use the dummy data API
+    const { useDummyData } = useDemo();
+    
     try {
-      // Fetch GPS data through our proxy
+      // Fetch GPS data
       try {
-        const gpsResponse = await fetch('/api/proxy?endpoint=gps');
+        // Use the dummy API endpoint or real API based on useDummyData
+        const gpsResponse = await fetch(`/api/proxy?endpoint=gps${useDummyData ? '&dummy=true' : ''}`);
         
         if (gpsResponse.ok) {
           const singleGpsPoint = await gpsResponse.json();
@@ -276,9 +284,10 @@ export default function DashboardPage() {
         });
       }
       
-      // Fetch status data through our proxy
+      // Fetch status data 
       try {
-        const statusResponse = await fetch('/api/proxy?endpoint=status');
+        // Use the dummy API endpoint or real API based on useDummyData
+        const statusResponse = await fetch(`/api/proxy?endpoint=status${useDummyData ? '&dummy=true' : ''}`);
         
         if (statusResponse.ok) {
           const data = await statusResponse.json();
@@ -290,6 +299,7 @@ export default function DashboardPage() {
           if (data) {
             setMetrics([
               {
+                id: "cpu",
                 title: "CPU Usage",
                 value: data.cpu || "--",
                 change: data.cpu_change || "--",
@@ -297,6 +307,7 @@ export default function DashboardPage() {
                 isDevelopment: !data.cpu
               },
               {
+                id: "ram",
                 title: "RAM",
                 value: data.ram || "--",
                 change: data.ram_change || "--",
@@ -304,6 +315,7 @@ export default function DashboardPage() {
                 isDevelopment: !data.ram
               },
               {
+                id: "temp",
                 title: "Temperature",
                 value: data.temperature || "--",
                 change: data.temp_change || "--",
@@ -311,6 +323,7 @@ export default function DashboardPage() {
                 isDevelopment: !data.temperature
               },
               {
+                id: "battery",
                 title: "Battery",
                 value: data.battery || "--",
                 change: data.battery_change || "--",
@@ -389,6 +402,29 @@ export default function DashboardPage() {
     },
   ];
 
+  // Additional system information
+  const additionalInfo = statusData ? [
+    {
+      label: "Disk Usage",
+      value: statusData.disk_usage ? 
+        `${statusData.disk_usage.used} / ${statusData.disk_usage.total}` : 
+        "Unknown"
+    },
+    {
+      label: "Network IP",
+      value: statusData.network?.ip || "Unknown"
+    },
+    {
+      label: "Network Signal",
+      value: statusData.network?.signal_strength || "Unknown"
+    },
+    {
+      label: "Network Status",
+      value: statusData.network?.status || "Unknown",
+      updated: statusData.network?.updated
+    }
+  ] : [];
+
   // Get current GPS position
   const currentPosition = gpsData.length > 0 ? gpsData[gpsData.length - 1] : null;
   
@@ -425,20 +461,198 @@ export default function DashboardPage() {
                   Development mode - no real data
                 </div>
               ) : (
-                <div
-                  className={`text-xs font-medium mt-2 ${
-                    metric.changeType === "increase"
-                      ? "text-red-600"
-                      : "text-green-600"
-                  }`}
-                >
-                  {metric.change} since last hour
-                </div>
+                <>
+                  <div
+                    className={`text-xs font-medium mt-2 ${
+                      metric.changeType === "increase"
+                        ? "text-red-600"
+                        : "text-green-600"
+                    }`}
+                  >
+                    {metric.change} since last check
+                  </div>
+                  {statusData && statusData[`${metric.id}_details`] && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Updated: {statusData[`${metric.id}_details`].updated}
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* CPU and RAM Details */}
+      {statusData && (statusData.cpu_details || statusData.ram_details) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          {/* CPU Details */}
+          {statusData.cpu_details && (
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-medium flex items-center">
+                    <Cpu className="h-5 w-5 mr-2 text-blue-500" />
+                    CPU Performance
+                  </CardTitle>
+                  <div className="text-xs text-gray-500">
+                    Updated: {statusData.cpu_details.updated}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* CPU Usage Bar */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-gray-500">Usage</span>
+                      <span className="text-sm font-medium">{statusData.cpu}  
+                        <span className={`ml-2 text-xs ${statusData.cpu_change.startsWith('+') ? 'text-red-500' : 'text-green-500'}`}>
+                          {statusData.cpu_change}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div
+                        className="bg-blue-600 h-2.5 rounded-full"
+                        style={{ width: statusData.cpu_details.usage + '%' }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* CPU Cores */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 mb-2">CPU Cores</h3>
+                    <div className="grid grid-cols-4 gap-2">
+                      {Array.from({ length: statusData.cpu_details.cores || 4 }).map((_, i) => {
+                        const coreUsage = Math.floor(
+                          statusData.cpu_details.usage * (0.75 + Math.random() * 0.5)
+                        );
+                        return (
+                          <div key={i} className="text-center">
+                            <div className="relative h-20 w-full bg-gray-100 rounded-md overflow-hidden">
+                              <div
+                                className="absolute bottom-0 w-full bg-blue-500 rounded-b-md transition-all duration-500"
+                                style={{ height: `${coreUsage}%` }}
+                              ></div>
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div>
+                                  <div className="text-xs font-medium">Core {i + 1}</div>
+                                  <div className="text-sm font-bold">{coreUsage}%</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Additional CPU Info */}
+                  <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="text-sm text-gray-500">Processes</div>
+                      <div className="text-xl font-bold">{statusData.cpu_details.processes || '--'}</div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="text-sm text-gray-500">Threads</div>
+                      <div className="text-xl font-bold">{statusData.cpu_details.processes ? Math.floor(statusData.cpu_details.processes * 2.5) : '--'}</div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* RAM Details */}
+          {statusData.ram_details && (
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-medium flex items-center">
+                    <HardDrive className="h-5 w-5 mr-2 text-green-500" />
+                    Memory Usage
+                  </CardTitle>
+                  <div className="text-xs text-gray-500">
+                    Updated: {statusData.ram_details.updated}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* RAM Usage Bar */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-gray-500">Memory</span>
+                      <span className="text-sm font-medium">{statusData.ram}
+                        <span className={`ml-2 text-xs ${statusData.ram_change.startsWith('+') ? 'text-red-500' : 'text-green-500'}`}>
+                          {statusData.ram_change}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div
+                        className="bg-green-500 h-2.5 rounded-full"
+                        style={{ width: (statusData.ram_details.used / statusData.ram_details.total * 100) + '%' }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Memory Distribution */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 mb-3">Memory Distribution</h3>
+                    <div className="relative h-48 w-full bg-gray-50 rounded-md overflow-hidden p-4">
+                      <div className="h-full flex items-end">
+                        {/* Used Memory */}
+                        <div
+                          className="w-1/3 bg-green-400 rounded-t-md mx-1 relative group"
+                          style={{ height: `${(statusData.ram_details.used / statusData.ram_details.total * 100)}%` }}
+                        >
+                          <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs font-medium text-gray-600">
+                            Used
+                          </div>
+                          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white text-xs py-1 px-2 rounded pointer-events-none">
+                            {statusData.ram_details.used}MB
+                          </div>
+                        </div>
+                        
+                        {/* Free Memory */}
+                        <div
+                          className="w-1/3 bg-blue-300 rounded-t-md mx-1 relative group"
+                          style={{ height: `${(statusData.ram_details.free / statusData.ram_details.total * 100)}%` }}
+                        >
+                          <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs font-medium text-gray-600">
+                            Free
+                          </div>
+                          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white text-xs py-1 px-2 rounded pointer-events-none">
+                            {statusData.ram_details.free}MB
+                          </div>
+                        </div>
+                        
+                        {/* Cached Memory (simulated) */}
+                        <div
+                          className="w-1/3 bg-gray-300 rounded-t-md mx-1 relative group"
+                          style={{ height: `${Math.min(30, 100 - (statusData.ram_details.used / statusData.ram_details.total * 100))}%` }}
+                        >
+                          <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs font-medium text-gray-600">
+                            Cached
+                          </div>
+                          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white text-xs py-1 px-2 rounded pointer-events-none">
+                            {Math.floor(statusData.ram_details.total * 0.2)}MB
+                          </div>
+                        </div>
+                      </div>
+                      <div className="absolute bottom-2 left-0 right-0 text-center text-xs text-gray-500">
+                        Total: {statusData.ram_details.total}MB
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Status Summary and Location Map */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -466,12 +680,34 @@ export default function DashboardPage() {
               </div>
             )}
             <div className="space-y-4">
-              {statusItems.map((item, i) => (
-                <div key={i} className="flex justify-between items-center border-b pb-2 last:border-0">
-                  <span className="text-gray-500">{item.label}</span>
-                  <span className="font-medium">{item.value}</span>
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-2">System Status</h3>
+                {statusItems.map((item, i) => (
+                  <div key={i} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0 mb-2">
+                    <span className="text-gray-500">{item.label}</span>
+                    <span className="font-medium">{item.value}</span>
+                  </div>
+                ))}
+              </div>
+              
+              {additionalInfo.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500 mb-2 pt-2 border-t">System Resources</h3>
+                  {additionalInfo.map((item, i) => (
+                    <div key={i} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0 mb-2">
+                      <span className="text-gray-500">{item.label}</span>
+                      <div className="text-right">
+                        <span className="font-medium">{item.value}</span>
+                        {item.updated && (
+                          <div className="text-xs text-gray-400">
+                            Updated: {item.updated}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>
