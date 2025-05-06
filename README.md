@@ -14,6 +14,7 @@ PiGuard is a comprehensive security monitoring and management system that integr
 - **Remote Configuration**: Configure Raspberry Pi settings remotely through the web interface
 - **Demo Mode**: Test functionality without actual hardware for development and demonstration
 - **Offline Capability**: Automatic caching of data with fallback to cached values when robot connection is lost
+- **Minimalist UI**: Clean, distraction-free interface focused on functionality
 
 ## Technology Stack
 
@@ -144,6 +145,23 @@ The dashboard provides a comprehensive overview of your security system, includi
 - Interactive map showing device locations
 - Recent activity logs
 
+### User Interface
+
+PiGuard features a clean, minimalist interface designed for efficiency:
+
+- Streamlined header with user account management
+- Intuitive sidebar navigation for all major sections
+- Focused content areas without visual distractions
+- Mobile-responsive design for access from any device
+
+### User Account Management
+
+From the user menu in the top-right corner, users can:
+
+- View their account details
+- Access settings
+- Logout from the system
+
 ### Camera Monitoring
 
 Access live and recorded footage from the Camera section. Features include:
@@ -248,11 +266,6 @@ If you're experiencing issues with the API connection:
 3. **Inspect Cached Data**:
    - When in offline mode, verify the cached data timestamp to understand how old the data is
    - If needed, you can inspect the cache directly using Prisma Studio: `npx prisma studio`
-
-4. **Reset Connections**:
-   - Use the "Refresh" button on each component to attempt reconnection
-   - Restart the robot API service if it's unresponsive
-   - In persistent issues, check the robot's network configuration and logs
 
 ## Contributing
 
