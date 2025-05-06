@@ -13,6 +13,7 @@ PiGuard is a comprehensive security monitoring and management system that integr
 - **System Logs**: Comprehensive logging for all system events and activities
 - **Remote Configuration**: Configure Raspberry Pi settings remotely through the web interface
 - **Demo Mode**: Test functionality without actual hardware for development and demonstration
+- **Offline Capability**: Automatic caching of data with fallback to cached values when robot connection is lost
 
 ## Technology Stack
 
@@ -22,6 +23,7 @@ PiGuard is a comprehensive security monitoring and management system that integr
 - **Monitoring**: Sentry for error tracking and performance monitoring
 - **Maps**: Leaflet for interactive mapping capabilities
 - **Real-time Communication**: Socket.io for live data updates
+- **Data Caching**: Prisma ORM for local caching of robot data
 
 ## Getting Started
 
@@ -165,6 +167,92 @@ Administrators can manage users through the settings panel:
 - Add new administrators
 - Approve pending user registrations
 - Revoke access when needed
+
+## API Integration Guide
+
+PiGuard integrates with the robot's API to fetch real-time data. Here's how the integration works:
+
+### API Endpoint Structure
+
+All API requests are made to the Raspberry Pi server running at a configurable URL (default: `http://10.146.42.252:8500`). The following endpoints are used:
+
+1. **GET /logs** - Retrieves a list of all log files
+   - Returns an array of log file information including filename and URL
+
+2. **GET /log/Arduino_*.json** - Fetches Arduino sensor data
+   - Contains Gyro data (X, Y, Z axes)
+   - Servo angles (Neck, Head)
+   - Distance measurements (Front, Left, Right)
+   - Motor state
+   - Timestamp
+
+3. **GET /log/Pi5_Latest.json** - Retrieves Raspberry Pi system information
+   - CPU and GPU temperatures
+   - CPU usage percentage
+   - RAM usage
+   - Network traffic (Upload/Download)
+   - Timestamp
+
+4. **GET /images** - Gets a list of available camera images
+   - Returns array of image objects with filename and URL
+   
+### Offline Mode & Data Caching
+
+PiGuard implements an intelligent caching system to ensure continuous operation even when the robot connection is lost:
+
+1. **Automatic Caching**:
+   - Every successful API response is stored in the local database
+   - The system maintains the last 10 records of each data type
+   - Each record contains a timestamp for tracking freshness
+
+2. **Fallback Mechanism**:
+   - When the API is unreachable, the system automatically retrieves the latest cached data
+   - A visual indicator shows when viewing cached data, including the last update time
+   - You can manually refresh to attempt reconnection
+
+3. **Cache Management**:
+   - Old cache entries are automatically pruned to prevent database bloat
+   - The cache is refreshed with each successful API connection
+
+### Data Flow
+
+The data flow from the robot to the user interface follows this path:
+
+1. API endpoint requests data from the robot
+2. Data is validated and transformed into the required format
+3. A copy is stored in the cache database
+4. The formatted data is sent to the frontend
+5. The UI components render the data with appropriate visualizations
+6. If connection fails, cached data is retrieved and displayed with an offline indicator
+
+### Security Considerations
+
+- All API requests are made server-side to prevent exposing the robot's API directly to clients
+- Authentication is required to access any sensor or camera data
+- Error handling prevents exposure of sensitive information in case of API failures
+
+## Troubleshooting API Connections
+
+If you're experiencing issues with the API connection:
+
+1. **Check Robot Connectivity**:
+   - Verify the Raspberry Pi is powered on and connected to the network
+   - Confirm the correct IP address in the application settings
+   - Test connectivity using `ping [robot-ip]` from a terminal
+
+2. **Review Error Messages**:
+   - The application displays specific error messages when API calls fail
+   - Check browser console for detailed error information
+   - System logs may contain additional context about connection failures
+
+3. **Inspect Cached Data**:
+   - When in offline mode, verify the cached data timestamp to understand how old the data is
+   - If needed, you can inspect the cache directly using Prisma Studio: `npx prisma studio`
+
+4. **Reset Connections**:
+   - Use the "Refresh" button on each component to attempt reconnection
+   - Restart the robot API service if it's unresponsive
+   - In persistent issues, check the robot's network configuration and logs
 
 ## Contributing
 

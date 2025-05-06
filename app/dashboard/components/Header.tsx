@@ -15,13 +15,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useDemo } from "@/app/lib/DemoContext";
 import { Switch } from "@/components/ui/switch";
+import { usePathname } from "next/navigation";
 
 interface HeaderProps {
   user: User;
 }
 
 export default function Header({ user }: HeaderProps) {
-  const { isDemoMode, useDummyData, toggleDummyData } = useDemo();
+  const pathname = usePathname();
+  const { isDemoMode, toggleDemoMode } = useDemo();
   const [status, setStatus] = useState<"Online" | "Offline" | "Connecting">("Connecting");
   const [raspberryPiIp, setRaspberryPiIp] = useState<string>("");
   const [raspberryPiPort, setRaspberryPiPort] = useState<string>("8000");
@@ -73,118 +75,23 @@ export default function Header({ user }: HeaderProps) {
   }, [raspberryPiIp, isDemoMode]);
 
   return (
-    <header className="bg-white shadow-sm z-10 py-2">
-      <div className="px-4">
-        <div className="flex justify-between items-center h-12">
-          {/* Left - System Status */}
-          <div className="flex items-center md:ml-0">
-            {/* System Status */}
-            <div className="flex items-center mr-6">
-              <div className="flex flex-col">
-                <div className="text-sm font-medium text-gray-500">System Status</div>
-                <div className="flex items-center">
-                  <div
-                    className={`h-2.5 w-2.5 rounded-full mr-2 ${
-                      status === "Online"
-                        ? "bg-green-500"
-                        : status === "Connecting"
-                        ? "bg-yellow-500"
-                        : "bg-red-500"
-                    }`}
-                  ></div>
-                  <span className="text-sm font-medium text-gray-900">{status}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Dummy Data Toggle */}
-            <div className="hidden md:flex items-center mr-6 border-l pl-6">
-              <Database className="h-5 w-5 text-gray-400 mr-2" />
-              <div className="flex flex-col">
-                <div className="text-sm font-medium text-gray-500">Dummy Data</div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={useDummyData}
-                    onCheckedChange={toggleDummyData}
-                    id="dummy-data-mode"
-                  />
-                  <label htmlFor="dummy-data-mode" className="text-sm text-gray-700 cursor-pointer select-none">
-                    {useDummyData ? "Enabled" : "Disabled"}
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Raspberry Pi IP */}
-            <div className="hidden md:flex items-center border-l pl-6">
-              <Cpu className="h-5 w-5 text-gray-400 mr-2" />
-              <div className="flex flex-col">
-                <div className="text-sm font-medium text-gray-500">Raspberry Pi</div>
-                <div className="flex items-center">
-                  <span className="text-sm font-medium text-gray-900">
-                    {isDemoMode 
-                      ? "Demo Mode" 
-                      : raspberryPiIp 
-                        ? `${raspberryPiIp}:${raspberryPiPort}` 
-                        : "Not configured"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right - User Profile & Notifications */}
-          <div className="flex items-center">
-            {/* Demo Mode Indicator */}
-            {isDemoMode && (
-              <div className="hidden md:flex items-center mr-4">
-                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
-                  Demo Mode
-                </span>
-              </div>
-            )}
-            
-            {/* Notifications */}
-            <button className="p-2 rounded-full text-gray-500 hover:text-gray-700 focus:outline-none">
-              <Bell className="h-5 w-5" />
-            </button>
-
-            {/* User Profile */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center ml-4 focus:outline-none">
-                  <div className="flex items-center">
-                    <div className="h-8 w-8 rounded-full bg-gray-500 flex items-center justify-center text-white">
-                      {user.name?.[0] || user.email?.[0] || <UserIcon className="h-5 w-5" />}
-                    </div>
-                    <div className="ml-2 hidden md:flex md:flex-col">
-                      <span className="text-sm font-medium text-gray-700 truncate max-w-[150px]">
-                        {user.name || user.email}
-                      </span>
-                      <span className="text-xs font-medium text-gray-500 truncate">
-                        {user.role}
-                      </span>
-                    </div>
-                    <ChevronDown className="ml-1 h-4 w-4 text-gray-500" />
-                  </div>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium">{user.name || "User"}</p>
-                  <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                </div>
-                <DropdownMenuSeparator />
-                <Link href="/dashboard/settings">
-                  <DropdownMenuItem>
-                    <Settings className="mr-2 h-4 w-4" /> Settings
-                  </DropdownMenuItem>
-                </Link>
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })}>
-                  <LogOut className="mr-2 h-4 w-4" /> Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-14 items-center">
+        <div className="mr-4 flex">
+          <Link href="/" className="mr-6 flex items-center space-x-2">
+            <span className="font-bold">PiGuard</span>
+          </Link>
+        </div>
+        <div className="flex flex-1 items-center justify-end space-x-2">
+          <div className="flex items-center space-x-2">
+            <Switch
+              checked={isDemoMode}
+              onCheckedChange={toggleDemoMode}
+              id="demo-mode"
+            />
+            <label htmlFor="demo-mode" className="text-sm text-gray-500 cursor-pointer select-none">
+              Demo Mode: {isDemoMode ? "Enabled" : "Disabled"}
+            </label>
           </div>
         </div>
       </div>

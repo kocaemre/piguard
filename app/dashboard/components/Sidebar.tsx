@@ -6,7 +6,6 @@ import {
   LayoutDashboard, 
   Camera, 
   BarChart, 
-  Sliders, 
   Settings, 
   FileText,
   Menu,
@@ -30,11 +29,6 @@ const navItems = [
     name: "Sensors",
     href: "/dashboard/sensors",
     icon: <BarChart className="h-5 w-5" />,
-  },
-  {
-    name: "Controls",
-    href: "/dashboard/controls",
-    icon: <Sliders className="h-5 w-5" />,
   },
   {
     name: "Settings",

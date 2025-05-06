@@ -99,6 +99,56 @@ model RaspberryPiConfig {
   category String @default("general")
 }
 
+// API Data Cache Models
+model ArduinoLogCache {
+  id          String   @id @default(cuid())
+  gyroX       String
+  gyroY       String
+  gyroZ       String
+  servoNeck   String
+  servoHead   String
+  distFront   String
+  distLeft    String
+  distRight   String
+  motorState  String
+  timestamp   DateTime
+  createdAt   DateTime @default(now())
+  
+  @@index([createdAt(sort: Desc)])
+}
+
+model PiSystemCache {
+  id          String   @id @default(cuid())
+  cpu         String
+  ram         String
+  cpuTemp     String
+  gpuTemp     String
+  uploadSpeed String
+  downloadSpeed String
+  timestamp   DateTime
+  createdAt   DateTime @default(now())
+  
+  @@index([createdAt(sort: Desc)])
+}
+
+model ImageCache {
+  id          String   @id @default(cuid())
+  filename    String
+  url         String
+  timestamp   DateTime @default(now())
+  
+  @@index([timestamp(sort: Desc)])
+}
+
+model LogFileCache {
+  id          String   @id @default(cuid())
+  filename    String
+  url         String
+  timestamp   DateTime @default(now())
+  
+  @@index([timestamp(sort: Desc)])
+}
+
 // Enum definitions
 enum Role {
   USER

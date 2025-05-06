@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useDemo } from "@/app/lib/DemoContext";
-import { AlertTriangle, Download, RefreshCw } from "lucide-react";
+import { AlertTriangle, Download, RefreshCw, AlertCircle } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -59,88 +58,110 @@ const getLogTextColor = (level: LogLevel) => {
   }
 };
 
-// Generate demo log entries
-const generateMockLogs = (count: number): LogEntry[] => {
-  const logLevels: LogLevel[] = ["info", "warning", "error", "debug"];
-  const logSources: LogSource[] = ["system", "camera", "motion", "sensor", "network"];
-  
-  const logMessages = {
-    system: [
-      "System started",
-      "System shut down",
-      "Raspberry Pi temperature high",
-      "System update available",
-      "Low memory warning",
-      "Battery low",
-      "Configuration updated",
-    ],
-    camera: [
-      "Camera connected",
-      "Camera disconnected",
-      "Camera feed interrupted",
-      "Motion detected in camera feed",
-      "Camera resolution changed",
-      "Camera failed to initialize",
-    ],
-    motion: [
-      "Motion detected",
-      "Motion sensor calibrated",
-      "No motion detected for 1 hour",
-      "Motion sensor offline",
-      "Multiple motion events detected",
-    ],
-    sensor: [
-      "Temperature sensor reading: 24.5°C",
-      "Humidity sensor reading: 65%",
-      "Distance sensor reading: 42cm",
-      "Sensor initialization failed",
-      "Sensor readings outside normal range",
-    ],
-    network: [
-      "Network connection established",
-      "Network connection lost",
-      "Weak WiFi signal",
-      "IP conflict detected",
-      "Failed to connect to remote server",
-      "API rate limit exceeded",
-    ],
-  };
-  
-  const logs: LogEntry[] = [];
-  const now = new Date();
-  
-  for (let i = 0; i < count; i++) {
-    const source = logSources[Math.floor(Math.random() * logSources.length)];
-    const level = i % 10 === 0 ? "error" : i % 5 === 0 ? "warning" : i % 8 === 0 ? "debug" : "info";
-    const messages = logMessages[source];
-    const message = messages[Math.floor(Math.random() * messages.length)];
-    
-    // Generate random time in the past (up to 24 hours ago)
-    const timestamp = new Date(now.getTime() - Math.random() * 24 * 60 * 60 * 1000);
-    
-    logs.push({
-      id: `log-${i}`,
-      timestamp: timestamp.toISOString(),
-      level,
-      source,
-      message,
-    });
-  }
-  
-  // Sort logs by timestamp (newest first)
-  return logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-};
-
 export default function LogsPage() {
-  const { isDemoMode } = useDemo();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isUsingCache, setIsUsingCache] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   
   // Filters
   const [levelFilter, setLevelFilter] = useState<LogLevel | "all">("all");
   const [sourceFilter, setSourceFilter] = useState<LogSource | "all">("all");
+  
+  // Parse log file content and convert to LogEntry
+  const parseLogFile = (fileContent: any, filename: string): LogEntry[] => {
+    // Check if we have Arduino log file
+    if (filename.includes("Arduino")) {
+      // Create entries for Arduino log data
+      const entries: LogEntry[] = [];
+      
+      // Add an entry for gyro data
+      entries.push({
+        id: `${filename}-gyro`,
+        timestamp: fileContent.Timestamp || new Date().toISOString(),
+        level: "info",
+        source: "sensor",
+        message: `Gyro - X: ${fileContent.Gyro?.X || 'N/A'}, Y: ${fileContent.Gyro?.Y || 'N/A'}, Z: ${fileContent.Gyro?.Z || 'N/A'}`
+      });
+      
+      // Add an entry for servo angles
+      entries.push({
+        id: `${filename}-servo`,
+        timestamp: fileContent.Timestamp || new Date().toISOString(),
+        level: "info",
+        source: "system",
+        message: `Servo Angles - Neck: ${fileContent.ServoAngles?.Neck || 'N/A'}, Head: ${fileContent.ServoAngles?.Head || 'N/A'}`
+      });
+      
+      // Add an entry for distances
+      entries.push({
+        id: `${filename}-distance`,
+        timestamp: fileContent.Timestamp || new Date().toISOString(),
+        level: "info",
+        source: "sensor",
+        message: `Distances - Front: ${fileContent.Distances?.Front || 'N/A'} cm, Left: ${fileContent.Distances?.Left || 'N/A'} cm, Right: ${fileContent.Distances?.Right || 'N/A'} cm`
+      });
+      
+      // Add an entry for motor state
+      const motorStateMessage = fileContent.MotorState || 'Unknown';
+      const motorLevel: LogLevel = motorStateMessage === "STOP" ? "info" : "warning";
+      
+      entries.push({
+        id: `${filename}-motor`,
+        timestamp: fileContent.Timestamp || new Date().toISOString(),
+        level: motorLevel,
+        source: "motion",
+        message: `Motor State: ${motorStateMessage}`
+      });
+      
+      return entries;
+    } 
+    // Check if we have Pi system log file
+    else if (filename.includes("Pi5")) {
+      // Create entries for Pi system data
+      const entries: LogEntry[] = [];
+      
+      // Add an entry for CPU and RAM
+      entries.push({
+        id: `${filename}-cpu-ram`,
+        timestamp: fileContent.Timestamp || new Date().toISOString(),
+        level: "info",
+        source: "system",
+        message: `System Status - CPU: ${fileContent.CPU || 'N/A'}, RAM: ${fileContent.RAM || 'N/A'}`
+      });
+      
+      // Add an entry for temperatures
+      const cpuTemp = parseFloat(fileContent["CPU Temp"] || "0");
+      const tempLevel: LogLevel = 
+        cpuTemp > 75 ? "error" : 
+        cpuTemp > 65 ? "warning" : 
+        "info";
+      
+      entries.push({
+        id: `${filename}-temp`,
+        timestamp: fileContent.Timestamp || new Date().toISOString(),
+        level: tempLevel,
+        source: "system",
+        message: `Temperatures - CPU: ${fileContent["CPU Temp"] || 'N/A'}, GPU: ${fileContent["GPU Temp"] || 'N/A'}`
+      });
+      
+      // Add an entry for network
+      entries.push({
+        id: `${filename}-network`,
+        timestamp: fileContent.Timestamp || new Date().toISOString(),
+        level: "info",
+        source: "network",
+        message: `Network Traffic - Upload: ${fileContent["Upload (KB/s)"] || '0'} KB/s, Download: ${fileContent["Download (KB/s)"] || '0'} KB/s`
+      });
+      
+      return entries;
+    }
+    
+    // For any other log type, return empty array
+    return [];
+  };
   
   // Fetch logs on component mount
   useEffect(() => {
@@ -149,43 +170,117 @@ export default function LogsPage() {
       setError(null);
       
       try {
-        if (isDemoMode) {
-          // Generate mock logs for demo mode
-          const mockLogs = generateMockLogs(50);
-          setLogs(mockLogs);
-        } else {
-          // In a real app, fetch from Raspberry Pi
-          const ipResponse = await fetch("/api/settings/raspberry-pi");
-          const ipData = await ipResponse.json();
+        // Fetch real logs from API
+        try {
+          // Get list of log files
+          const logsResponse = await fetch('/api/robot-db/logs');
           
-          if (!ipData.ip) {
-            setError("Raspberry Pi IP not configured. Please set it in Settings.");
+          if (!logsResponse.ok) {
+            throw new Error(`Failed to fetch logs: ${logsResponse.status}`);
+          }
+          
+          const logsData = await logsResponse.json();
+          
+          // Check if data is coming from cache
+          if (logsData.isFromCache) {
+            setIsUsingCache(true);
+            setLastUpdated(logsData.lastUpdated);
+          } else {
+            setIsUsingCache(false);
+            setLastUpdated(null);
+          }
+          
+          // Check if we have log files
+          if (!logsData.logs || logsData.logs.length === 0) {
+            setError("No log files available");
             setLoading(false);
             return;
           }
           
-          // Simulate API call delay
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          // Process each log file
+          let allLogs: LogEntry[] = [];
           
-          // Randomly fail 30% of the time to simulate connection issues
-          if (Math.random() > 0.7) {
-            throw new Error("Failed to connect to Raspberry Pi");
+          // Only process the latest Arduino and Pi5 logs
+          const arduinoLog = logsData.logs.find((file: any) => file.filename.includes('Arduino'));
+          const piLog = logsData.logs.find((file: any) => file.filename.includes('Pi5'));
+          
+          // Process logs with available content
+          if (arduinoLog) {
+            try {
+              // Fetch log file content
+              const response = await fetch('/api/robot-db/logs', {
+                method: 'POST',
+                headers: await (async () => {
+                  return {
+                    'Content-Type': 'application/json',
+                  };
+                })(),
+                body: JSON.stringify({ logUrl: arduinoLog.url }),
+              });
+              
+              if (response.ok) {
+                const logContent = await response.json();
+                if (logContent.log) {
+                  const entries = parseLogFile(logContent.log, arduinoLog.filename);
+                  allLogs = [...allLogs, ...entries];
+                }
+              }
+            } catch (err) {
+              console.error("Error fetching Arduino log content:", err);
+            }
           }
           
-          // For demo purposes, use mock data in both cases
-          const mockLogs = generateMockLogs(50);
-          setLogs(mockLogs);
+          if (piLog) {
+            try {
+              // Fetch log file content
+              const response = await fetch('/api/robot-db/logs', {
+                method: 'POST',
+                headers: await (async () => {
+                  return {
+                    'Content-Type': 'application/json',
+                  };
+                })(),
+                body: JSON.stringify({ logUrl: piLog.url }),
+              });
+              
+              if (response.ok) {
+                const logContent = await response.json();
+                if (logContent.log) {
+                  const entries = parseLogFile(logContent.log, piLog.filename);
+                  allLogs = [...allLogs, ...entries];
+                }
+              }
+            } catch (err) {
+              console.error("Error fetching Pi log content:", err);
+            }
+          }
+          
+          // If we have logs, set them
+          if (allLogs.length > 0) {
+            // Sort logs by timestamp (newest first)
+            allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            setLogs(allLogs);
+          } else {
+            // Empty logs array in case of error
+            setLogs([]);
+            setError("No log data found or could not be processed. Check your connection.");
+          }
+        } catch (err) {
+          console.error("Error fetching logs:", err);
+          setError("Failed to fetch logs. Check your connection.");
+          setLogs([]);
         }
       } catch (err) {
-        console.error("Error fetching logs:", err);
-        setError("Failed to fetch logs. Check connection or enable Demo Mode.");
+        console.error("Error in logs component:", err);
+        setError("An unexpected error occurred.");
+        setLogs([]);
       } finally {
         setLoading(false);
       }
     };
     
     fetchLogs();
-  }, [isDemoMode]);
+  }, []);
   
   // Apply filters whenever logs or filters change
   useEffect(() => {
@@ -202,27 +297,113 @@ export default function LogsPage() {
     setFilteredLogs(filtered);
   }, [logs, levelFilter, sourceFilter]);
   
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setLogs([]);
     setLoading(true);
     setError(null);
     
-    setTimeout(() => {
-      if (isDemoMode) {
-        const mockLogs = generateMockLogs(50);
-        setLogs(mockLogs);
-        setLoading(false);
-      } else {
-        // In a real app, fetch from Raspberry Pi
-        if (Math.random() > 0.7) {
-          setError("Failed to fetch logs. Check connection or enable Demo Mode.");
-        } else {
-          const mockLogs = generateMockLogs(50);
-          setLogs(mockLogs);
-        }
-        setLoading(false);
+    // Fetch real logs
+    try {
+      // Get list of log files
+      const logsResponse = await fetch('/api/robot-db/logs');
+      
+      if (!logsResponse.ok) {
+        throw new Error(`Failed to fetch logs: ${logsResponse.status}`);
       }
-    }, 1500);
+      
+      const logsData = await logsResponse.json();
+      
+      // Check if data is coming from cache
+      if (logsData.isFromCache) {
+        setIsUsingCache(true);
+        setLastUpdated(logsData.lastUpdated);
+      } else {
+        setIsUsingCache(false);
+        setLastUpdated(null);
+      }
+      
+      // Check if we have log files
+      if (!logsData.logs || logsData.logs.length === 0) {
+        setError("No log files available");
+        setLoading(false);
+        return;
+      }
+      
+      // Process each log file
+      let allLogs: LogEntry[] = [];
+      
+      // Only process the latest Arduino and Pi5 logs
+      const arduinoLog = logsData.logs.find((file: any) => file.filename.includes('Arduino'));
+      const piLog = logsData.logs.find((file: any) => file.filename.includes('Pi5'));
+      
+      // Process logs with available content
+      if (arduinoLog) {
+        try {
+          // Fetch log file content
+          const response = await fetch('/api/robot-db/logs', {
+            method: 'POST',
+            headers: await (async () => {
+              return {
+                'Content-Type': 'application/json',
+              };
+            })(),
+            body: JSON.stringify({ logUrl: arduinoLog.url }),
+          });
+          
+          if (response.ok) {
+            const logContent = await response.json();
+            if (logContent.log) {
+              const entries = parseLogFile(logContent.log, arduinoLog.filename);
+              allLogs = [...allLogs, ...entries];
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching Arduino log content:", err);
+        }
+      }
+      
+      if (piLog) {
+        try {
+          // Fetch log file content
+          const response = await fetch('/api/robot-db/logs', {
+            method: 'POST',
+            headers: await (async () => {
+              return {
+                'Content-Type': 'application/json',
+              };
+            })(),
+            body: JSON.stringify({ logUrl: piLog.url }),
+          });
+          
+          if (response.ok) {
+            const logContent = await response.json();
+            if (logContent.log) {
+              const entries = parseLogFile(logContent.log, piLog.filename);
+              allLogs = [...allLogs, ...entries];
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching Pi log content:", err);
+        }
+      }
+      
+      // If we have logs, set them
+      if (allLogs.length > 0) {
+        // Sort logs by timestamp (newest first)
+        allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setLogs(allLogs);
+      } else {
+        // Empty logs array in case of error
+        setLogs([]);
+        setError("No log data found or could not be processed. Check your connection.");
+      }
+    } catch (err) {
+      console.error("Error refreshing logs:", err);
+      setError("Failed to refresh logs. Check your connection.");
+      setLogs([]);
+    } finally {
+      setLoading(false);
+    }
   };
   
   const handleDownloadLogs = () => {
@@ -254,20 +435,18 @@ export default function LogsPage() {
         <h1 className="text-3xl font-bold">System Logs</h1>
         <p className="text-gray-500 mt-2">
           View and analyze system logs from your Raspberry Pi robot.
-          {isDemoMode && <span className="ml-2 text-yellow-600 font-medium">(Demo Mode)</span>}
         </p>
       </div>
       
-      {/* Demo Mode Notice */}
-      {isDemoMode && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+      {/* Cache Notice */}
+      {isUsingCache && lastUpdated && (
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4">
           <div className="flex">
-            <AlertTriangle className="h-6 w-6 text-yellow-500 mr-2" />
+            <AlertCircle className="h-6 w-6 text-amber-500 mr-2 flex-shrink-0" />
             <div>
-              <p className="font-medium text-yellow-700">Demo Mode Active</p>
-              <p className="text-sm text-yellow-600">
-                You're viewing simulated system logs. To connect to your actual Raspberry Pi logs,
-                disable Demo Mode in Settings.
+              <p className="font-medium text-amber-700">Using cached logs</p>
+              <p className="text-sm text-amber-600">
+                Unable to connect to the robot API. Showing previously cached logs from {new Date(lastUpdated).toLocaleString()}.
               </p>
             </div>
           </div>
@@ -275,7 +454,7 @@ export default function LogsPage() {
       )}
       
       {/* Error Notice */}
-      {error && !isDemoMode && (
+      {error && (
         <div className="bg-red-50 border-l-4 border-red-400 p-4">
           <div className="flex">
             <AlertTriangle className="h-6 w-6 text-red-500 mr-2" />

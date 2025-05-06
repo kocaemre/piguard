@@ -3,10 +3,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { useDemo } from "@/app/lib/DemoContext";
-import { MapPin, Navigation, RefreshCw, Database, Cpu, HardDrive } from "lucide-react";
+import { MapPin, Navigation, RefreshCw, AlertCircle, Cpu, HardDrive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import dynamic from "next/dynamic";
-import { dummyGpsData } from "@/app/lib/dummyGpsData";
 import { Switch } from "@/components/ui/switch";
 
 // Dynamically import map components to avoid SSR issues
@@ -47,73 +46,10 @@ const MarkerIcon = () => {
   return null;
 };
 
-// Generate realistic movement path with smooth curves
-const generateRealisticPath = (count: number) => {
-  // Mimicking a robot's movement pattern - starting point (Istanbul)
-  const baseLat = 41.015137;
-  const baseLng = 28.979530;
-  const data = [];
-  
-  // Create an initial path pattern that looks like a robot exploration
-  // For a demo, we'll make a slightly randomized path 
-  let currentLat = baseLat;
-  let currentLng = baseLng;
-  
-  // First data point
-  data.push({
-    latitude: currentLat,
-    longitude: currentLng,
-    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    altitude: 100 + Math.random() * 5,
-    satellites: Math.floor(Math.random() * 3) + 6,
-    signalStrength: 75 + Math.random() * 15,
-  });
-  
-  // Direction changes to create a more realistic path
-  const movementPatterns = [
-    { lat: 0.0002, lng: 0.0001 },   // Northeast
-    { lat: 0.0001, lng: 0.0003 },   // East
-    { lat: -0.0001, lng: 0.0002 },  // Southeast
-    { lat: -0.0002, lng: 0 },       // South
-    { lat: -0.0001, lng: -0.0002 }, // Southwest
-    { lat: 0.0001, lng: -0.0002 },  // West
-    { lat: 0.0003, lng: 0 },        // North
-  ];
-  
-  // Generate the path
-  for (let i = 1; i < count; i++) {
-    // Gradually change direction to create a smooth path
-    const pattern = movementPatterns[Math.floor(i / 10) % movementPatterns.length];
-    const randomFactor = 0.6 + Math.random() * 0.8; // Randomize the movement a bit
-    
-    currentLat += pattern.lat * randomFactor;
-    currentLng += pattern.lng * randomFactor;
-    
-    // Add some very small random noise for naturalness
-    currentLat += (Math.random() - 0.5) * 0.00005;
-    currentLng += (Math.random() - 0.5) * 0.00005;
-    
-    // Calculate time for this point (going backwards from now)
-    const time = new Date(Date.now() - (count - i) * 15000);
-    
-    data.push({
-      latitude: currentLat,
-      longitude: currentLng,
-      time: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      altitude: 100 + Math.sin(i / 5) * 5 + Math.random() * 2,
-      satellites: Math.floor(Math.random() * 3) + 6,
-      signalStrength: 75 + Math.sin(i / 10) * 10 + Math.random() * 5,
-    });
-  }
-  
-  return data;
-};
-
 export default function DashboardPage() {
-  const { isDemoMode, useDummyGpsData, toggleDummyGpsData } = useDemo();
+  const { isDemoMode } = useDemo();
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [gpsData, setGpsData] = useState<any[]>([]);
-  const [currentDummyIndex, setCurrentDummyIndex] = useState(0);
   const [showPath, setShowPath] = useState(true);
   const [statusData, setStatusData] = useState<any>(null);
   const [gpsRetryCount, setGpsRetryCount] = useState(0);
@@ -121,7 +57,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
-  const maxRetries = 10;
+  const [isUsingCachedGps, setIsUsingCachedGps] = useState(false);
+  const [isUsingCachedStatus, setIsUsingCachedStatus] = useState(false);
+  const [gpsLastUpdated, setGpsLastUpdated] = useState<string | null>(null);
+  const [statusLastUpdated, setStatusLastUpdated] = useState<string | null>(null);
+  const maxRetries = 3;
   const [metrics, setMetrics] = useState([
     {
       id: "cpu",
@@ -148,160 +88,97 @@ export default function DashboardPage() {
       isDevelopment: true
     },
     {
-      id: "battery",
-      title: "Battery",
+      id: "gpu",
+      title: "GPU Temperature",
       value: "--",
       change: "--",
       changeType: "neutral",
       isDevelopment: true
     },
   ]);
+  const [map, setMap] = useState<L.Map | null>(null);
+  const [marker, setMarker] = useState<L.Marker | null>(null);
+  const [polyline, setPolyline] = useState<L.Polyline | null>(null);
   
-  // Load Leaflet CSS and fetch data
   useEffect(() => {
     const loadLeafletCSS = async () => {
-      // @ts-ignore - Importing CSS file directly
       await import('leaflet/dist/leaflet.css');
       setLeafletLoaded(true);
     };
     
     loadLeafletCSS();
-    
     fetchData();
     
-    // Set up polling interval
-    const interval = setInterval(fetchData, 5000); // Update every 5 seconds
-    
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, [isDemoMode, useDummyGpsData]);
+  }, []);
 
   const fetchData = async () => {
-    if (isDemoMode) {
-      // Generate mock GPS data for demo
-      setGpsData(generateRealisticPath(30));
-      setLoading(false);
-      return;
-    }
-    
-    if (useDummyGpsData) {
-      // Use dummy GPS data
-      const newGpsData = [...gpsData];
-      const dummyPoint = {
-        latitude: dummyGpsData[currentDummyIndex].latitude,
-        longitude: dummyGpsData[currentDummyIndex].longitude,
-        altitude: dummyGpsData[currentDummyIndex].altitude,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        satellites: Math.floor(Math.random() * 3) + 6,
-        signalStrength: 75 + Math.random() * 15,
-      };
-
-      newGpsData.push(dummyPoint);
-      
-      // Keep only the last 30 points
-      if (newGpsData.length > 30) {
-        newGpsData.shift();
-      }
-      
-      setGpsData(newGpsData);
-      
-      // Move to the next dummy data point
-      setCurrentDummyIndex((prevIndex) => (prevIndex + 1) % dummyGpsData.length);
-      
-      // If we have status data, keep it, otherwise generate dummy status
-      if (!statusData) {
-        setStatusData({
-          cpu: "25%",
-          cpu_change: "-2.5%",
-          ram: "512MB / 2GB",
-          ram_change: "+45MB",
-          temperature: "42°C",
-          temp_change: "+1.5°C",
-          battery: "85%",
-          battery_change: "-5%",
-          timestamp: new Date().toISOString(),
-          camera: "connected",
-          warnings: "0",
-          uptime: "4h 23m",
-        });
-      }
-      
-      setGpsError(null);
-      setStatusError(null);
-      setLoading(false);
-      return;
-    }
-    
-    // Check if we should use the dummy data API
-    const { useDummyData } = useDemo();
-    
     try {
+      setLoading(true);
+      
       // Fetch GPS data
       try {
-        // Use the dummy API endpoint or real API based on useDummyData
-        const gpsResponse = await fetch(`/api/proxy?endpoint=gps${useDummyData ? '&dummy=true' : ''}`);
-        
-        if (gpsResponse.ok) {
-          const singleGpsPoint = await gpsResponse.json();
-          setGpsError(null);
-          setGpsRetryCount(0);
+        const response = await fetch('/api/robot-db/gps');
+        if (response.ok) {
+          const data = await response.json();
           
-          // Transform single GPS point to an array for compatibility
-          const newGpsData = [...gpsData];
-          
-          // Add new point if we have valid coordinates
-          if (singleGpsPoint.latitude !== 0 && singleGpsPoint.longitude !== 0) {
-            newGpsData.push(singleGpsPoint);
-            
-            // Keep only the last 30 points
-            if (newGpsData.length > 30) {
-              newGpsData.shift();
-            }
-            
-            setGpsData(newGpsData);
-          } else if (newGpsData.length === 0) {
-            // If we have no data yet and got zeros, use demo data
-            setGpsData(generateRealisticPath(5));
+          // Check if we have GPS data
+          if (data && data.length > 0) {
+            setGpsData(data);
+            setGpsError(null);
+            setGpsRetryCount(0);
+            setIsUsingCachedGps(false);
+            setGpsLastUpdated(null);
+          } else {
+            setGpsError("GPS data not available");
           }
         } else {
-          // Increment retry count for GPS
           setGpsRetryCount(prev => {
             const newCount = prev + 1;
             if (newCount >= maxRetries) {
-              setGpsError("Failed to fetch GPS data after multiple attempts.");
+              setGpsError("Unable to fetch GPS data. Please check your connection.");
             }
             return newCount;
           });
         }
       } catch (err) {
         console.error("Error fetching GPS data:", err);
-        // Increment retry count for GPS
         setGpsRetryCount(prev => {
           const newCount = prev + 1;
           if (newCount >= maxRetries) {
-            setGpsError("Failed to fetch GPS data after multiple attempts.");
+            setGpsError("Unable to fetch GPS data. Please check your connection.");
           }
           return newCount;
         });
       }
-      
-      // Fetch status data 
+
+      // Fetch status data
       try {
-        // Use the dummy API endpoint or real API based on useDummyData
-        const statusResponse = await fetch(`/api/proxy?endpoint=status${useDummyData ? '&dummy=true' : ''}`);
-        
-        if (statusResponse.ok) {
-          const data = await statusResponse.json();
-          setStatusData(data);
-          setStatusError(null);
-          setStatusRetryCount(0);
+        const response = await fetch('/api/robot-db/status');
+        if (response.ok) {
+          const data = await response.json();
           
-          // Update metrics based on status data if available
+          // Check for isFromCache flag
+          if (data.isFromCache) {
+            setIsUsingCachedStatus(true);
+            setStatusLastUpdated(data.lastUpdated);
+          } else {
+            setIsUsingCachedStatus(false);
+            setStatusLastUpdated(null);
+          }
+          
           if (data) {
+            setStatusData(data);
+            setStatusError(null);
+            setStatusRetryCount(0);
+            
+            // Format metrics from the received data
             setMetrics([
               {
                 id: "cpu",
                 title: "CPU Usage",
-                value: data.cpu || "--",
+                value: data.cpu || "Data not available",
                 change: data.cpu_change || "--",
                 changeType: data.cpu_change && parseFloat(data.cpu_change) > 0 ? "increase" : "decrease",
                 isDevelopment: !data.cpu
@@ -309,7 +186,7 @@ export default function DashboardPage() {
               {
                 id: "ram",
                 title: "RAM",
-                value: data.ram || "--",
+                value: data.ram || "Data not available",
                 change: data.ram_change || "--",
                 changeType: data.ram_change && parseFloat(data.ram_change) > 0 ? "increase" : "decrease",
                 isDevelopment: !data.ram
@@ -317,38 +194,38 @@ export default function DashboardPage() {
               {
                 id: "temp",
                 title: "Temperature",
-                value: data.temperature || "--",
+                value: data.temperature || "Data not available",
                 change: data.temp_change || "--",
                 changeType: data.temp_change && parseFloat(data.temp_change) > 0 ? "increase" : "decrease",
                 isDevelopment: !data.temperature
               },
               {
-                id: "battery",
-                title: "Battery",
-                value: data.battery || "--",
-                change: data.battery_change || "--",
-                changeType: data.battery_change && parseFloat(data.battery_change) > 0 ? "increase" : "decrease",
-                isDevelopment: !data.battery
+                id: "gpu",
+                title: "GPU Temperature",
+                value: data.gpu_temp || "Data not available",
+                change: "0.0",
+                changeType: "neutral",
+                isDevelopment: !data.gpu_temp
               },
             ]);
+          } else {
+            setStatusError("System status data not available");
           }
         } else {
-          // Increment retry count for status
           setStatusRetryCount(prev => {
             const newCount = prev + 1;
             if (newCount >= maxRetries) {
-              setStatusError("Failed to fetch status data after multiple attempts.");
+              setStatusError("Unable to fetch system status data. Please check your connection.");
             }
             return newCount;
           });
         }
       } catch (err) {
-        console.error("Error fetching status data:", err);
-        // Increment retry count for status
+        console.error("Error fetching system status data:", err);
         setStatusRetryCount(prev => {
           const newCount = prev + 1;
           if (newCount >= maxRetries) {
-            setStatusError("Failed to fetch status data after multiple attempts.");
+            setStatusError("Unable to fetch system status data. Please check your connection.");
           }
           return newCount;
         });
@@ -374,67 +251,48 @@ export default function DashboardPage() {
     fetchData();
   };
 
-  // Status information
+  // Calculate status items based on the status data from API
   const statusItems = [
-    { 
-      label: "Last Connection", 
-      value: statusData ? 
-        new Date(statusData.timestamp || Date.now()).toLocaleTimeString() : 
-        "Just now" 
+    {
+      label: "Connection Status",
+      value: !statusData ? "Disconnected (No data)" : 
+             isUsingCachedStatus ? "Offline (Using Cache)" : 
+             "Online"
     },
-    { 
-      label: "Active Sensors", 
-      value: statusData ? 
-        `${statusData.camera === "connected" ? "1" : "0"}/2` : 
-        "Unknown" 
+    {
+      label: "Camera Status",
+      value: statusData ? (statusData.camera || "Unknown") : "No data"
     },
-    { 
-      label: "Warnings", 
-      value: statusData ? 
-        (statusData.warnings || "0") : 
-        "0" 
-    },
-    { 
-      label: "Uptime", 
-      value: statusData ? 
-        (statusData.uptime || "Unknown") : 
-        "Unknown" 
-    },
+    {
+      label: "Last Updated",
+      value: !statusData ? "Never updated" :
+             isUsingCachedStatus ? 
+             `${new Date(statusLastUpdated || "").toLocaleString()} (Cached)` : 
+             new Date(statusData.timestamp || "").toLocaleString()
+    }
   ];
 
-  // Additional system information
-  const additionalInfo = statusData ? [
-    {
-      label: "Disk Usage",
-      value: statusData.disk_usage ? 
-        `${statusData.disk_usage.used} / ${statusData.disk_usage.total}` : 
-        "Unknown"
-    },
-    {
-      label: "Network IP",
-      value: statusData.network?.ip || "Unknown"
-    },
-    {
-      label: "Network Signal",
-      value: statusData.network?.signal_strength || "Unknown"
-    },
-    {
-      label: "Network Status",
-      value: statusData.network?.status || "Unknown",
-      updated: statusData.network?.updated
-    }
-  ] : [];
-
   // Get current GPS position
-  const currentPosition = gpsData.length > 0 ? gpsData[gpsData.length - 1] : null;
+  const currentPosition = gpsData.length > 0 && 
+                         gpsData[gpsData.length - 1].latitude && 
+                         gpsData[gpsData.length - 1].longitude && 
+                         !isNaN(gpsData[gpsData.length - 1].latitude) && 
+                         !isNaN(gpsData[gpsData.length - 1].longitude)
+    ? gpsData[gpsData.length - 1] 
+    : null;
   
   // Default center (Istanbul) if no GPS data
   const mapCenter = currentPosition 
     ? [currentPosition.latitude, currentPosition.longitude] 
     : [41.015137, 28.979530];
     
-  // Create line coordinates for path
-  const pathPositions = gpsData.map(point => [point.latitude, point.longitude]);
+  // Create line coordinates for path - eklenen valid koordinat kontrolü
+  const pathPositions = gpsData
+    .filter(point => 
+      point && point.latitude && point.longitude && 
+      !isNaN(point.latitude) && !isNaN(point.longitude)
+    )
+    .map(point => [point.latitude, point.longitude]);
 
   return (
     <div className="space-y-6">
@@ -444,6 +302,27 @@ export default function DashboardPage() {
           Welcome to the Robot Management System. Monitor and control your Raspberry Pi robot.
         </p>
       </div>
+
+      {/* Cache Notice */}
+      {(isUsingCachedGps || isUsingCachedStatus) && (
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4">
+          <div className="flex">
+            <AlertCircle className="h-6 w-6 text-amber-500 mr-2 flex-shrink-0" />
+            <div>
+              <p className="font-medium text-amber-700">Using cached data</p>
+              <p className="text-sm text-amber-600">
+                Unable to connect to the robot API. Showing previously cached data.
+                {isUsingCachedGps && gpsLastUpdated && (
+                  <span className="block">GPS data last updated: {new Date(gpsLastUpdated).toLocaleString()}</span>
+                )}
+                {isUsingCachedStatus && statusLastUpdated && (
+                  <span className="block">System status last updated: {new Date(statusLastUpdated).toLocaleString()}</span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -456,9 +335,9 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{metric.value}</div>
-              {metric.value === "--" ? (
+              {metric.value === "Data not available" ? (
                 <div className="text-xs font-medium mt-2 text-amber-600">
-                  Development mode - no real data
+                  Data not available
                 </div>
               ) : (
                 <>
@@ -466,10 +345,12 @@ export default function DashboardPage() {
                     className={`text-xs font-medium mt-2 ${
                       metric.changeType === "increase"
                         ? "text-red-600"
-                        : "text-green-600"
+                        : metric.changeType === "decrease"
+                        ? "text-green-600"
+                        : "text-gray-600"
                     }`}
                   >
-                    {metric.change} since last check
+                    {metric.change} last check
                   </div>
                   {statusData && statusData[`${metric.id}_details`] && (
                     <div className="text-xs text-gray-500 mt-1">
@@ -507,7 +388,7 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm text-gray-500">Usage</span>
                       <span className="text-sm font-medium">{statusData.cpu}  
-                        <span className={`ml-2 text-xs ${statusData.cpu_change.startsWith('+') ? 'text-red-500' : 'text-green-500'}`}>
+                        <span className={`ml-2 text-xs ${statusData.cpu_change?.startsWith('+') ? 'text-red-500' : 'text-green-500'}`}>
                           {statusData.cpu_change}
                         </span>
                       </span>
@@ -585,7 +466,7 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm text-gray-500">Memory</span>
                       <span className="text-sm font-medium">{statusData.ram}
-                        <span className={`ml-2 text-xs ${statusData.ram_change.startsWith('+') ? 'text-red-500' : 'text-green-500'}`}>
+                        <span className={`ml-2 text-xs ${statusData.ram_change?.startsWith('+') ? 'text-red-500' : 'text-green-500'}`}>
                           {statusData.ram_change}
                         </span>
                       </span>
@@ -667,7 +548,7 @@ export default function DashboardPage() {
               className="flex items-center gap-2"
             >
               <RefreshCw className="h-4 w-4" />
-              Refresh Status
+              Refresh
             </Button>
           </CardHeader>
           <CardContent>
@@ -689,25 +570,6 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
-              
-              {additionalInfo.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2 pt-2 border-t">System Resources</h3>
-                  {additionalInfo.map((item, i) => (
-                    <div key={i} className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0 mb-2">
-                      <span className="text-gray-500">{item.label}</span>
-                      <div className="text-right">
-                        <span className="font-medium">{item.value}</span>
-                        {item.updated && (
-                          <div className="text-xs text-gray-400">
-                            Updated: {item.updated}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -715,21 +577,7 @@ export default function DashboardPage() {
         {/* Map */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CardTitle>Robot Location</CardTitle>
-              {!isDemoMode && (
-                <div className="flex items-center space-x-2 ml-4">
-                  <Switch
-                    checked={useDummyGpsData}
-                    onCheckedChange={toggleDummyGpsData}
-                    id="dummy-gps-mode"
-                  />
-                  <label htmlFor="dummy-gps-mode" className="text-sm text-gray-500 cursor-pointer select-none">
-                    Use Dummy GPS Data
-                  </label>
-                </div>
-              )}
-            </div>
+            <CardTitle>Robot Location</CardTitle>
             <div className="flex space-x-2">
               <Button 
                 variant="outline" 
@@ -750,20 +598,12 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0 overflow-hidden rounded-b-lg">
-            {gpsError && !useDummyGpsData && (
+            {gpsError && (
               <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm">
                 <p className="font-medium">Error: {gpsError}</p>
                 {gpsRetryCount >= maxRetries && (
-                  <p>Maximum retry attempts reached. Please refresh manually or enable dummy GPS data.</p>
+                  <p>Maximum retry attempts reached. Please refresh manually.</p>
                 )}
-              </div>
-            )}
-            {useDummyGpsData && !isDemoMode && (
-              <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 text-sm">
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4" />
-                  <p className="font-medium">Using dummy GPS data for testing</p>
-                </div>
               </div>
             )}
             {leafletLoaded && (
