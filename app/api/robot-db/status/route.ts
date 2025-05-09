@@ -8,10 +8,10 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.146.42.2
 export async function GET() {
   try {
     // /logs endpoint'i kullanılacak, API doğru path yapısı ile güncellenecek
-    console.log(`Fetching from API: ${API_BASE_URL}/logs`);
+    console.log(`Fetching from API: ${API_BASE_URL}/log/Pi5_Latest.json`);
     
     // First try to fetch from the robot API
-    const apiResponse = await fetch(`${API_BASE_URL}/logs`, {
+    const apiResponse = await fetch(`${API_BASE_URL}/log/Pi5_Latest.json`, {
       cache: 'no-store',
       next: { revalidate: 0 },
       // Timeout ekleyelim ve diğer fetch seçenekleri
