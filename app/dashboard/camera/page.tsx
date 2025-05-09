@@ -10,6 +10,7 @@ export default function CameraPage() {
   const { isDemoMode } = useDemo();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [imageTimestamp, setImageTimestamp] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -21,7 +22,8 @@ export default function CameraPage() {
 
   const fetchImage = async () => {
     try {
-      setLoading(true);
+      // Don't show loading state at all during refreshes
+      // setLoading(true);
       setError(null);
       
       const response = await fetch('/api/robot-db/camera');
@@ -41,7 +43,22 @@ export default function CameraPage() {
         if (data && data.image_url) {
           setImageUrl(data.image_url);
           setFileName(data.filename);
+          
+          // Extract timestamp from filename (photo_YYYYMMDD_HHMMSS_XXX.jpg)
+          if (data.filename) {
+            const match = data.filename.match(/photo_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_/);
+            if (match) {
+              const [_, year, month, day, hour, minute, second] = match;
+              const formattedDate = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+              setImageTimestamp(formattedDate);
+            } else {
+              setImageTimestamp(null);
+            }
+          }
+          
           setRetryCount(0);
+          // Only set loading to false once we have a URL
+          setLoading(false);
         } else {
           setError("No camera feed available");
         }
@@ -63,9 +80,8 @@ export default function CameraPage() {
         }
         return newCount;
       });
-    } finally {
-      setLoading(false);
     }
+    // Don't call setLoading(false) here
   };
 
   const handleRefresh = async () => {
@@ -104,7 +120,7 @@ export default function CameraPage() {
   useEffect(() => {
     fetchImage();
     
-    const interval = setInterval(fetchImage, 5000);
+    const interval = setInterval(fetchImage, 2000); // Refresh every 2 seconds
     return () => clearInterval(interval);
   }, []);
 
@@ -197,11 +213,15 @@ export default function CameraPage() {
           )}
           
           <div className="relative bg-black rounded-b-lg overflow-hidden h-[calc(100vh-300px)]">
-            {loading ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+            {!imageUrl ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                <Camera className="h-16 w-16 mb-4 opacity-30" />
+                <p className="text-xl">No camera feed available</p>
+                <p className="text-sm text-gray-400 mt-2">
+                  Check your robot's camera connection or try refreshing
+                </p>
               </div>
-            ) : imageUrl ? (
+            ) : (
               <div className="relative h-full flex items-center justify-center">
                 <img
                   src={imageUrl}
@@ -210,13 +230,16 @@ export default function CameraPage() {
                   style={{ 
                     transform: `scale(${zoomLevel})`,
                   }}
+                  loading="eager"
                 />
                 {fileName && (
                   <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white p-3 flex justify-between items-center">
                     <div>
                       <div className="text-sm font-medium">{fileName}</div>
                       <div className="text-xs text-gray-300">
-                        {isUsingCache ? `Cached: ${lastUpdated ? new Date(lastUpdated).toLocaleString() : 'Unknown'}` : 'Live feed'}
+                        {imageTimestamp ? `Captured: ${imageTimestamp}` : 
+                         isUsingCache ? `Cached: ${lastUpdated ? new Date(lastUpdated).toLocaleString() : 'Unknown'}` : 
+                         'Live feed'}
                       </div>
                     </div>
                     <div className="flex space-x-2 sm:hidden">
@@ -258,14 +281,6 @@ export default function CameraPage() {
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                <Camera className="h-16 w-16 mb-4 opacity-30" />
-                <p className="text-xl">No camera feed available</p>
-                <p className="text-sm text-gray-400 mt-2">
-                  Check your robot's camera connection or try refreshing
-                </p>
-              </div>
             )}
           </div>
           
@@ -275,7 +290,7 @@ export default function CameraPage() {
                 <div className="flex items-center">
                   <Film className="h-4 w-4 mr-2 text-blue-500" />
                   <span className="text-sm">
-                    Image updates automatically every 5 seconds
+                    Image updates automatically every 2 seconds
                   </span>
                 </div>
                 <div className="text-xs text-gray-500">
