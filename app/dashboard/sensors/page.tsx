@@ -73,17 +73,25 @@ export default function SensorsPage() {
   useEffect(() => {
     fetchSensorData();
     
-    const interval = setInterval(fetchSensorData, 5000);
+    const interval = setInterval(fetchSensorData, 20000);
     return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Sensors</h1>
-        <p className="text-gray-500 mt-2">
-          Monitor sensor data from your Raspberry Pi robot.
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Sensors</h1>
+          <p className="text-gray-500 mt-2">
+            Monitor sensor data from your Raspberry Pi robot.
+          </p>
+        </div>
+        {sensorData?.timestamp && (
+          <div className="text-right">
+            <div className="text-sm text-gray-500">Last Data Update</div>
+            <div className="text-lg font-medium">{new Date(sensorData.timestamp).toLocaleString()}</div>
+          </div>
+        )}
       </div>
 
       {/* Cache Notice */}
@@ -185,24 +193,67 @@ export default function SensorsPage() {
                 </Card>
               </div>
               
-              {/* 3D Orientation Visualization (simplified) */}
+              {/* 3D Orientation Visualization (improved) */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-500 mb-4">Orientation Visualization</h3>
-                <div className="aspect-square max-w-sm mx-auto relative border border-gray-200 rounded-lg overflow-hidden bg-white">
+                <div className="aspect-square max-w-sm mx-auto relative border border-gray-200 rounded-lg overflow-hidden bg-gradient-to-b from-blue-50 to-white shadow-inner">
+                  <div className="absolute inset-0 grid grid-cols-7 grid-rows-7 opacity-20">
+                    {Array(7).fill(0).map((_, i) => (
+                      <div key={`hline-${i}`} className="col-span-7 row-span-1 border-b border-blue-200" />
+                    ))}
+                    {Array(7).fill(0).map((_, i) => (
+                      <div key={`vline-${i}`} className="col-span-1 row-span-7 border-r border-blue-200" />
+                    ))}
+                  </div>
                   <div 
                     className="absolute inset-0 flex items-center justify-center"
                     style={{
-                      transform: `rotateX(${parseInt(sensorData.gyro.x) / 10}deg) rotateY(${parseInt(sensorData.gyro.y) / 10}deg) rotateZ(${parseInt(sensorData.gyro.z) / 10}deg)`
+                      perspective: "800px",
+                      transformStyle: "preserve-3d"
                     }}
                   >
-                    <div className="w-24 h-16 bg-blue-500 rounded-md opacity-80 flex items-center justify-center text-white font-bold">
-                      ROBOT
+                    <div
+                      className="w-36 h-24 flex items-center justify-center rounded-lg shadow-lg bg-gradient-to-br from-blue-600 to-blue-400 text-white font-bold"
+                      style={{
+                        transform: `rotateX(${sensorData?.gyro ? parseInt(sensorData.gyro.x) : 0}deg) rotateY(${sensorData?.gyro ? parseInt(sensorData.gyro.y) : 0}deg) rotateZ(${sensorData?.gyro ? parseInt(sensorData.gyro.z) : 0}deg)`,
+                        transition: "transform 0.5s ease-out",
+                        transformStyle: "preserve-3d"
+                      }}
+                    >
+                      <div className="relative w-full h-full flex items-center justify-center">
+                        {/* Top face marker */}
+                        <div className="absolute top-1 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-red-500"></div>
+                        {/* Arrow indicator */}
+                        <div className="w-10 h-16">
+                          <div className="w-full h-8 bg-white rounded-t-full"></div>
+                          <div className="w-full h-8 bg-gray-800 rounded-b-full flex items-center justify-center text-white text-xs">
+                            FRONT
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="absolute bottom-2 right-2 flex gap-2 text-xs text-gray-500">
+                    <div className="flex items-center">
+                      <span className="inline-block w-3 h-3 bg-red-500 rounded-full mr-1"></span>
+                      Top
                     </div>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 text-center mt-2">
-                  Simplified representation, not to scale
-                </p>
+                <div className="grid grid-cols-3 mt-3 text-sm text-center">
+                  <div>
+                    <span className="font-medium">X: </span>
+                    <span className="text-blue-600">{sensorData?.gyro ? sensorData.gyro.x : 0}°</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Y: </span>
+                    <span className="text-green-600">{sensorData?.gyro ? sensorData.gyro.y : 0}°</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Z: </span>
+                    <span className="text-purple-600">{sensorData?.gyro ? sensorData.gyro.z : 0}°</span>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
@@ -291,52 +342,96 @@ export default function SensorsPage() {
                 </Card>
               </div>
               
-              {/* Distance Visualization */}
+              {/* Distance Visualization (improved) */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-500 mb-4">Distance Visualization</h3>
-                <div className="aspect-square max-w-sm mx-auto relative border border-gray-200 rounded-lg overflow-hidden bg-white">
+                <div className="aspect-square max-w-sm mx-auto relative border border-gray-200 rounded-lg overflow-hidden bg-gradient-to-b from-gray-50 to-white shadow-inner">
+                  {/* Grid background */}
                   <div className="absolute inset-0">
-                    {/* Robot in the center */}
-                    <div className="absolute top-1/2 left-1/2 w-16 h-16 -ml-8 -mt-8 bg-gray-800 rounded-full flex items-center justify-center text-white">
-                      <span className="text-xs">Robot</span>
+                    <svg width="100%" height="100%" className="opacity-20">
+                      <defs>
+                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="gray" strokeWidth="0.5"/>
+                        </pattern>
+                      </defs>
+                      <rect width="100%" height="100%" fill="url(#grid)" />
+                      
+                      {/* Circular distance markers */}
+                      <circle cx="50%" cy="50%" r="25%" fill="none" stroke="#aaa" strokeWidth="1" strokeDasharray="5,5" />
+                      <circle cx="50%" cy="50%" r="50%" fill="none" stroke="#aaa" strokeWidth="1" strokeDasharray="5,5" />
+                      <circle cx="50%" cy="50%" r="75%" fill="none" stroke="#aaa" strokeWidth="1" strokeDasharray="5,5" />
+                    </svg>
+                  </div>
+                  
+                  {/* Robot in the center */}
+                  <div className="absolute top-1/2 left-1/2 w-20 h-20 -ml-10 -mt-10 bg-gradient-to-b from-gray-800 to-gray-700 rounded-full shadow-lg flex items-center justify-center text-white border-4 border-gray-600 z-20">
+                    <div className="text-sm font-bold">ROBOT</div>
+                  </div>
+                  
+                  {/* Front distance */}
+                  <div 
+                    className="absolute left-1/2 -ml-10 w-20 bg-gradient-to-r from-red-500 to-red-400 shadow-md rounded-md z-10 flex flex-col items-center justify-end overflow-hidden transition-all duration-300"
+                    style={{ 
+                      top: `${Math.max(5, 50 - Math.min(45, parseFloat(sensorData?.distances?.front || "0") * 0.9))}%`,
+                      height: `${Math.min(45, parseFloat(sensorData?.distances?.front || "0") * 0.9)}%` 
+                    }}
+                  >
+                    <div className="absolute top-0 left-0 right-0 h-2 bg-red-600"></div>
+                    <div className="absolute bottom-1 left-0 right-0 text-center text-xs font-bold text-white px-1 py-1 rounded-sm bg-red-700/70">
+                      {sensorData?.distances?.front || 0} cm
                     </div>
-                    
-                    {/* Front distance */}
-                    <div 
-                      className="absolute top-0 left-1/2 w-16 -ml-8 bg-red-200 border-red-400 border rounded"
-                      style={{ height: `${Math.min(48, Math.max(5, parseFloat(sensorData.distances.front) * 2))}%` }}
-                    >
-                      <div className="absolute bottom-0 left-0 right-0 h-2 bg-red-400"></div>
-                      <div className="absolute bottom-3 left-0 right-0 text-center text-xs text-red-700">
-                        {sensorData.distances.front} cm
+                  </div>
+                  
+                  {/* Left distance */}
+                  <div 
+                    className="absolute top-1/2 -mt-10 h-20 bg-gradient-to-b from-yellow-400 to-yellow-500 shadow-md rounded-md z-10 flex items-center justify-start overflow-hidden transition-all duration-300"
+                    style={{ 
+                      left: `${Math.max(5, 50 - Math.min(45, parseFloat(sensorData?.distances?.left || "0") * 0.9))}%`,
+                      width: `${Math.min(45, parseFloat(sensorData?.distances?.left || "0") * 0.9)}%` 
+                    }}
+                  >
+                    <div className="absolute left-0 top-0 bottom-0 w-2 bg-yellow-600"></div>
+                    <div className="absolute right-1 top-0 bottom-0 flex items-center h-full">
+                      <div className="text-xs font-bold text-white px-1 py-1 rounded-sm bg-yellow-700/70">
+                        {sensorData?.distances?.left || 0} cm
                       </div>
                     </div>
-                    
-                    {/* Left distance */}
-                    <div 
-                      className="absolute top-1/2 left-0 h-16 -mt-8 bg-yellow-200 border-yellow-400 border rounded"
-                      style={{ width: `${Math.min(48, Math.max(5, parseFloat(sensorData.distances.left) * 2))}%` }}
-                    >
-                      <div className="absolute right-0 top-0 bottom-0 w-2 bg-yellow-400"></div>
-                      <div className="absolute right-3 top-0 bottom-0 flex items-center text-xs text-yellow-700">
-                        {sensorData.distances.left} cm
+                  </div>
+                  
+                  {/* Right distance */}
+                  <div 
+                    className="absolute top-1/2 -mt-10 h-20 bg-gradient-to-b from-blue-400 to-blue-500 shadow-md rounded-md z-10 flex items-center justify-end overflow-hidden transition-all duration-300"
+                    style={{ 
+                      right: `${Math.max(5, 50 - Math.min(45, parseFloat(sensorData?.distances?.right || "0") * 0.9))}%`,
+                      width: `${Math.min(45, parseFloat(sensorData?.distances?.right || "0") * 0.9)}%` 
+                    }}
+                  >
+                    <div className="absolute right-0 top-0 bottom-0 w-2 bg-blue-600"></div>
+                    <div className="absolute left-1 top-0 bottom-0 flex items-center h-full">
+                      <div className="text-xs font-bold text-white px-1 py-1 rounded-sm bg-blue-700/70">
+                        {sensorData?.distances?.right || 0} cm
                       </div>
                     </div>
-                    
-                    {/* Right distance */}
-                    <div 
-                      className="absolute top-1/2 right-0 h-16 -mt-8 bg-blue-200 border-blue-400 border rounded"
-                      style={{ width: `${Math.min(48, Math.max(5, parseFloat(sensorData.distances.right) * 2))}%` }}
-                    >
-                      <div className="absolute left-0 top-0 bottom-0 w-2 bg-blue-400"></div>
-                      <div className="absolute left-3 top-0 bottom-0 flex items-center text-xs text-blue-700">
-                        {sensorData.distances.right} cm
-                      </div>
+                  </div>
+                  
+                  {/* Legend */}
+                  <div className="absolute bottom-2 right-2 bg-white/80 p-1 rounded text-xs flex flex-col gap-1">
+                    <div className="flex items-center">
+                      <span className="inline-block w-3 h-3 bg-red-500 rounded-sm mr-1"></span>
+                      Front
+                    </div>
+                    <div className="flex items-center">
+                      <span className="inline-block w-3 h-3 bg-yellow-500 rounded-sm mr-1"></span>
+                      Left
+                    </div>
+                    <div className="flex items-center">
+                      <span className="inline-block w-3 h-3 bg-blue-500 rounded-sm mr-1"></span>
+                      Right
                     </div>
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 text-center mt-2">
-                  Distances represented as percentage of maximum range
+                  Distance scale: each circle represents approximately 50cm
                 </p>
               </div>
             </div>

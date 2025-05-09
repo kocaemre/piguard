@@ -3,18 +3,51 @@ import { PrismaClient } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 
 const prisma = new PrismaClient();
-const API_BASE_URL = 'http://10.146.42.252:8500';
+const API_BASE_URL = 'http://10.146.42.252:8501';
+
+// Define interface for log file entries
+interface LogFile {
+  filename: string;
+  url: string;
+}
 
 export async function GET() {
   try {
-    // First try to fetch from the robot API
-    const apiResponse = await fetch(`${API_BASE_URL}/log/Arduino_Latest.json`, {
+    // First fetch the list of available log files
+    const logsResponse = await fetch(`${API_BASE_URL}/logs`, {
+      cache: 'no-store',
+      next: { revalidate: 20 }
+    });
+    
+    if (!logsResponse.ok) {
+      throw new Error(`Failed to fetch logs list: ${logsResponse.status}`);
+    }
+    
+    const logs = await logsResponse.json() as LogFile[];
+    
+    // Filter Arduino logs and find the most recent one
+    const arduinoLogs = logs.filter((log: LogFile) => 
+      log.filename.startsWith('Arduino_') && log.filename.endsWith('.json')
+    );
+    
+    if (arduinoLogs.length === 0) {
+      throw new Error('No Arduino logs found');
+    }
+    
+    // Sort by filename in descending order (newest first)
+    arduinoLogs.sort((a: LogFile, b: LogFile) => b.filename.localeCompare(a.filename));
+    
+    // Get the most recent log file
+    const latestLog = arduinoLogs[0];
+    
+    // Fetch the actual log data
+    const apiResponse = await fetch(`${API_BASE_URL}${latestLog.url}`, {
       cache: 'no-store',
       next: { revalidate: 0 }
     });
     
     if (!apiResponse.ok) {
-      throw new Error(`Failed to fetch from API: ${apiResponse.status}`);
+      throw new Error(`Failed to fetch log data: ${apiResponse.status}`);
     }
     
     const arduinoData = await apiResponse.json();
