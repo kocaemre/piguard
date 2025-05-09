@@ -3,14 +3,19 @@ import { PrismaClient } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 
 const prisma = new PrismaClient();
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.146.42.252:8500';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://10.146.42.252:8501';
 
 export async function GET() {
   try {
+    // /logs endpoint'i kullanılacak, API doğru path yapısı ile güncellenecek
+    console.log(`Fetching from API: ${API_BASE_URL}/logs`);
+    
     // First try to fetch from the robot API
-    const apiResponse = await fetch(`${API_BASE_URL}/log/Pi5_Latest.json`, {
+    const apiResponse = await fetch(`${API_BASE_URL}/logs`, {
       cache: 'no-store',
-      next: { revalidate: 0 }
+      next: { revalidate: 0 },
+      // Timeout ekleyelim ve diğer fetch seçenekleri
+      signal: AbortSignal.timeout(5000) // 5 saniye timeout
     });
     
     if (!apiResponse.ok) {
@@ -148,7 +153,13 @@ export async function GET() {
       }
     };
     
-    return NextResponse.json(formattedResponse);
+    return NextResponse.json(formattedResponse, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   } catch (error) {
     console.error('Error fetching Pi system data from API:', error);
     
@@ -214,7 +225,10 @@ export async function GET() {
           status: 200,
           headers: {
             'X-Data-Source': 'cache',
-            'X-Cache-Date': cachedData.createdAt.toISOString()
+            'X-Cache-Date': cachedData.createdAt.toISOString(),
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           }
         });
       }
@@ -233,7 +247,14 @@ export async function GET() {
           warnings: "N/A",
           uptime: "N/A"
         },
-        { status: 503 }
+        { 
+          status: 503,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          }
+        }
       );
     } catch (dbError) {
       console.error('Error fetching cached Pi system data:', dbError);
@@ -243,7 +264,14 @@ export async function GET() {
           details: error instanceof Error ? error.message : 'Unknown error',
           status: 500
         },
-        { status: 500 }
+        { 
+          status: 500,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          }
+        }
       );
     }
   } finally {
@@ -251,4 +279,15 @@ export async function GET() {
     revalidatePath('/dashboard');
     await prisma.$disconnect();
   }
+}
+
+// CORS preflight için OPTIONS metodu
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    }
+  });
 } 
